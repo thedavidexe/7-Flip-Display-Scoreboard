@@ -39,12 +39,16 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "esp_rest_main.h"
 
 //#include "rtc.h"
 #include "status_led.h"
 #include "74AHC595.h"
 
 /* Macros for setting a key in a variable */
+
+
+
 #define SET_KEY(state, key)    ((state) |= (key))      		/* Set bit to 1 */
 #define CLEAR_KEY(state, key)  ((state) &= ~(key))    		/* Set bit to 0 */
 #define CHECK_KEY(state, key)  (((state) & (key)) != 0)		/* Is bit set?	*/

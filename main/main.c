@@ -34,14 +34,16 @@ status_t status = {};
 
 void app_main(void)
 {
-	shift_register_init();
-	
     /* Start all tasks */
-    //xTaskCreate(RTCHandlingTask, "RTCHandlingTask", 4048, NULL, 1, NULL);
+    xTaskCreate(RestfulServerTask, "RestfulServerTask", 4048, NULL, 1, NULL);
+    
+    
+    shift_register_init();
     detect_display_count();
    
     //DisplayNumber(2);
-    DisplaySymbol(0x2AAA, 2);
+    DisplaySymbol(0x159A, 2);
+    DisplaySymbol(0x199A, 1);
     
     while(1)
     {
