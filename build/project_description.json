@@ -1,7 +1,7 @@
 {
     "version":            "1.1",
     "project_name":       "main",
-    "project_version":    "65fa101-dirty",
+    "project_version":    "d739206-dirty",
     "project_path":       "C:/Users/Sebastian/ESP32_Workspace/7_flip_display",
     "idf_path":           "C:/Espressif/frameworks/esp-idf-v5.4",
     "build_dir":          "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/build",

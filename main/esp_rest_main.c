@@ -31,14 +31,21 @@
 #include "esp_rest_main.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_event.h"
 #include "lwip/apps/netbiosns.h"
 #include "mdns.h"
 #include "nvs_flash.h"
-#include "protocol_examples_common.h"
+#include "nvs.h"
+#include "esp_netif.h"
+#include "esp_wifi.h"
+#include "esp_system.h"
 #include "esp_spiffs.h"
 
 esp_err_t start_rest_server(const char *base_path);
+
+#define DEFAULT_AP_SSID "7-Flip-HotSpot"
+#define DEFAULT_AP_PASS "12345678"   // Default AP password (8+ chars for WPA2, empty = open network)
 
 static void initialise_mdns(void)
 {
@@ -88,20 +95,123 @@ esp_err_t init_fs(void)
 
 void RestfulServerTask(void *arg)
 {
-	ESP_LOGI(SERVER, "Initializing the server...");
-	
-	ESP_ERROR_CHECK(nvs_flash_init());
-	ESP_ERROR_CHECK(esp_netif_init());
-	ESP_ERROR_CHECK(esp_event_loop_create_default());
-	initialise_mdns();
-	netbiosns_init();
-	netbiosns_set_name(CONFIG_EXAMPLE_MDNS_HOST_NAME);
-	
-	ESP_ERROR_CHECK(example_connect());
-	ESP_ERROR_CHECK(init_fs());
-	ESP_ERROR_CHECK(start_rest_server(CONFIG_EXAMPLE_WEB_MOUNT_POINT));
-	
-	ESP_LOGI(SERVER, "DONE");
-	
-	vTaskDelete(NULL);
+    ESP_LOGI(SERVER, "Initializing the server...");
+    // Initialize NVS, network interfaces, and default event loop
+    ESP_ERROR_CHECK(nvs_flash_init());
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    initialise_mdns();
+    netbiosns_init();
+    netbiosns_set_name(CONFIG_EXAMPLE_MDNS_HOST_NAME);
+
+    // Load Wi-Fi mode and credentials from NVS
+    nvs_handle_t nvs;
+    ESP_ERROR_CHECK(nvs_open("storage", NVS_READWRITE, &nvs));
+    uint8_t mode = MODE_AP;
+    esp_err_t err = nvs_get_u8(nvs, "mode", &mode);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        ESP_LOGW(SERVER, "No Wi-Fi config in NVS, defaulting to Hotspot (AP) mode");
+        mode = MODE_AP;
+    } else if (err != ESP_OK) {
+        ESP_LOGE(SERVER, "Error reading Wi-Fi mode from NVS: %s", esp_err_to_name(err));
+        mode = MODE_AP;
+    }
+    char ssid[33] = {0};
+    char password[65] = {0};
+    if (mode == MODE_STA) {
+        // Read stored SSID and password for Station mode
+        size_t ssid_len = sizeof(ssid);
+        size_t pass_len = sizeof(password);
+        if (nvs_get_str(nvs, "ssid", ssid, &ssid_len) != ESP_OK ||
+            nvs_get_str(nvs, "password", password, &pass_len) != ESP_OK) {
+            ESP_LOGW(SERVER, "Wi-Fi credentials not found, switching to Hotspot mode");
+            mode = MODE_AP;
+        }
+    }
+    nvs_close(nvs);
+
+    // Initialize Wi-Fi according to mode
+    esp_netif_t *sta_netif = NULL;
+    esp_netif_t *ap_netif  = NULL;
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    if (mode == MODE_STA) {
+        sta_netif = esp_netif_create_default_wifi_sta();  // create Wi-Fi station interface
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+        // Configure Wi-Fi station with stored SSID/password
+        wifi_config_t wifi_config = {};
+        strlcpy((char*)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
+        strlcpy((char*)wifi_config.sta.password, password, sizeof(wifi_config.sta.password));
+        if (strlen(password) == 0) {
+            // Allow connection to open network if password is empty
+            wifi_config.sta.threshold.authmode = WIFI_AUTH_OPEN;
+        } else {
+            wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+        }
+        wifi_config.sta.pmf_cfg.capable = true;
+        wifi_config.sta.pmf_cfg.required = false;
+        ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+        ESP_ERROR_CHECK(esp_wifi_start());
+        ESP_ERROR_CHECK(esp_wifi_connect());
+
+        // Wait up to 30 seconds for Wi-Fi connection (check for IP address)
+        ESP_LOGI(SERVER, "Connecting to Wi-Fi: SSID=\"%s\"", ssid);
+        bool connected = false;
+        esp_netif_ip_info_t ip_info;
+        for (int i = 0; i < 30; ++i) {
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            ESP_ERROR_CHECK(esp_netif_get_ip_info(sta_netif, &ip_info));
+            if (ip_info.ip.addr != 0) {
+                connected = true;
+                break;
+            }
+        }
+        if (!connected) {
+            ESP_LOGW(SERVER, "Failed to connect in STA mode, enabling Hotspot (AP) mode");
+            ESP_ERROR_CHECK(esp_wifi_stop());
+            // Switch to Access Point mode (Hotspot) after failed STA connect
+            if (!ap_netif) {
+                ap_netif = esp_netif_create_default_wifi_ap();  // create Wi-Fi AP interface
+            }
+            wifi_config_t ap_config = {};
+            strlcpy((char*)ap_config.ap.ssid, DEFAULT_AP_SSID, sizeof(ap_config.ap.ssid));
+            strlcpy((char*)ap_config.ap.password, DEFAULT_AP_PASS, sizeof(ap_config.ap.password));
+            ap_config.ap.ssid_len = strlen(DEFAULT_AP_SSID);
+            ap_config.ap.max_connection = 4;
+            ap_config.ap.authmode = WIFI_AUTH_WPA_WPA2_PSK;
+            if (strlen(DEFAULT_AP_PASS) == 0) {
+                ap_config.ap.authmode = WIFI_AUTH_OPEN;
+            }
+            ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+            ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
+            ESP_ERROR_CHECK(esp_wifi_start());
+            mode = MODE_AP;
+            ESP_LOGI(SERVER, "Hotspot started with SSID: %s", DEFAULT_AP_SSID);
+        } else {
+            ESP_LOGI(SERVER, "Connected to Wi-Fi network, IP: " IPSTR, IP2STR(&ip_info.ip));
+        }
+    } else {
+        // Start in Access Point mode (Hotspot) by default
+        ap_netif = esp_netif_create_default_wifi_ap();
+        wifi_config_t ap_config = {};
+        strlcpy((char*)ap_config.ap.ssid, DEFAULT_AP_SSID, sizeof(ap_config.ap.ssid));
+        strlcpy((char*)ap_config.ap.password, DEFAULT_AP_PASS, sizeof(ap_config.ap.password));
+        ap_config.ap.ssid_len = strlen(DEFAULT_AP_SSID);
+        ap_config.ap.max_connection = 4;
+        ap_config.ap.authmode = WIFI_AUTH_WPA_WPA2_PSK;
+        if (strlen(DEFAULT_AP_PASS) == 0) {
+            ap_config.ap.authmode = WIFI_AUTH_OPEN;
+        }
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+        ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
+        ESP_ERROR_CHECK(esp_wifi_start());
+        ESP_LOGI(SERVER, "Hotspot started with SSID: %s", DEFAULT_AP_SSID);
+    }
+
+    // Initialize SPIFFS and start the RESTful web server (serving Vue app and API)
+    ESP_ERROR_CHECK(init_fs());
+    ESP_ERROR_CHECK(start_rest_server(CONFIG_EXAMPLE_WEB_MOUNT_POINT));
+    ESP_LOGI(SERVER, "Server started");
+
+    vTaskDelete(NULL);
 }

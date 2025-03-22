@@ -36,6 +36,10 @@
 #define CONFIG_EXAMPLE_MDNS_HOST_NAME "esp-home"
 #define CONFIG_EXAMPLE_WEB_MOUNT_POINT "/www"
 
+/* Device Wi-Fi operating modes for persistent storage */
+#define MODE_AP  0   // Hotspot (Access Point) mode
+#define MODE_STA 1   // Wi-Fi Client (Station) mode
+
 void RestfulServerTask(void *arg);
 
 #endif /* MAIN_ESP_REST_MAIN_H_ */
