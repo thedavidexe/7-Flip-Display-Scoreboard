@@ -1,7 +1,7 @@
 {
     "version":            "1.1",
     "project_name":       "main",
-    "project_version":    "d739206-dirty",
+    "project_version":    "4dd4307-dirty",
     "project_path":       "C:/Users/Sebastian/ESP32_Workspace/7_flip_display",
     "idf_path":           "C:/Espressif/frameworks/esp-idf-v5.4",
     "build_dir":          "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/build",
@@ -1210,7 +1210,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [ "espressif__mdns" ],
             "file": "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/build/esp-idf/main/libmain.a",
-            "sources": [ "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/main.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/rest_server.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/rtc.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/74AHC595.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/esp_rest_main.c" ],
+            "sources": [ "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/main.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/rest_server.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/rtc.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/74AHC595.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/esp_rest_main.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/mqtt_com.c" ],
             "include_dirs": [ "." ]
         },
         "mbedtls": {
@@ -1240,7 +1240,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [],
             "file": "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/build/esp-idf/mqtt/libmqtt.a",
-            "sources": [ "C:/Espressif/frameworks/esp-idf-v5.4/components/mqtt/esp-mqtt/mqtt_client.c", "C:/Espressif/frameworks/esp-idf-v5.4/components/mqtt/esp-mqtt/lib/mqtt_msg.c", "C:/Espressif/frameworks/esp-idf-v5.4/components/mqtt/esp-mqtt/lib/mqtt_outbox.c", "C:/Espressif/frameworks/esp-idf-v5.4/components/mqtt/esp-mqtt/lib/platform_esp32_idf.c" ],
+            "sources": [ "C:/Espressif/frameworks/esp-idf-v5.4/components/mqtt/esp-mqtt/mqtt_client.c", "C:/Espressif/frameworks/esp-idf-v5.4/components/mqtt/esp-mqtt/lib/mqtt_msg.c", "C:/Espressif/frameworks/esp-idf-v5.4/components/mqtt/esp-mqtt/lib/mqtt_outbox.c", "C:/Espressif/frameworks/esp-idf-v5.4/components/mqtt/esp-mqtt/lib/platform_esp32_idf.c", "C:/Espressif/frameworks/esp-idf-v5.4/components/mqtt/esp-mqtt/lib/mqtt5_msg.c", "C:/Espressif/frameworks/esp-idf-v5.4/components/mqtt/esp-mqtt/mqtt5_client.c" ],
             "include_dirs": [ "C:/Espressif/frameworks/esp-idf-v5.4/components/mqtt/esp-mqtt/include" ]
         },
         "newlib": {

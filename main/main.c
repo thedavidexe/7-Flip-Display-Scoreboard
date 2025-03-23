@@ -29,6 +29,7 @@
  */
 
 #include "main.h"
+#include "mqtt_com.h"
 
 status_t status = {};
 
@@ -36,6 +37,7 @@ void app_main(void)
 {
     /* Start all tasks */
     xTaskCreate(RestfulServerTask, "RestfulServerTask", 4048, NULL, 1, NULL);
+    xTaskCreate(mqtt_task, "MqttTask", 4096, NULL, 5, NULL);
     
     
     shift_register_init();
