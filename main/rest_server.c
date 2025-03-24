@@ -24,6 +24,7 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "mqtt_com.h"
+#include "ota.h"
 
 extern status_t status;  // Global device status (from main.c)
 
@@ -172,6 +173,61 @@ static esp_err_t mqtt_get_handler(httpd_req_t *req)
     httpd_resp_sendstr(req, resp_str);
     free(resp_str);
     cJSON_Delete(resp_obj);
+    return ESP_OK;
+}
+
+/* Handler for POST /api/v1/ota */
+static esp_err_t ota_post_handler(httpd_req_t *req)
+{
+    int total_len = req->content_len;
+    int cur_len = 0;
+    int received = 0;
+    // Use the scratch buffer from the rest_server_context
+    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
+
+    // Check if content length exceeds buffer size
+    if (total_len >= SCRATCH_BUFSIZE) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Content too long");
+        return ESP_FAIL;
+    }
+
+    // Receive the POST data in chunks
+    while (cur_len < total_len) {
+        received = httpd_req_recv(req, buf + cur_len, total_len - cur_len);
+        if (received <= 0) {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive data");
+            return ESP_FAIL;
+        }
+        cur_len += received;
+    }
+    buf[cur_len] = '\0';
+
+    // Parse the JSON content
+    cJSON *root = cJSON_Parse(buf);
+    if (root == NULL) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    // Extract the "url" field from the JSON
+    cJSON *url_item = cJSON_GetObjectItem(root, "url");
+    if (url_item == NULL || !cJSON_IsString(url_item) || (url_item->valuestring == NULL)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing or invalid 'url'");
+        cJSON_Delete(root);
+        return ESP_FAIL;
+    }
+
+    // Call the OTA start function with the provided URL
+    esp_err_t ret = ota_start(url_item->valuestring);
+    cJSON_Delete(root);
+
+    if (ret != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to start OTA update");
+        return ESP_FAIL;
+    }
+
+    // Respond with a success message
+    httpd_resp_sendstr(req, "OTA update initiated");
     return ESP_OK;
 }
 
@@ -620,6 +676,14 @@ esp_err_t start_rest_server(const char *base_path)
         .user_ctx = rest_context
     };
     httpd_register_uri_handler(server, &common_get_uri);
+    
+    httpd_uri_t ota_post_uri = {
+	    .uri      = "/api/v1/ota",
+	    .method   = HTTP_POST,
+	    .handler  = ota_post_handler,
+	    .user_ctx = rest_context
+	};
+	httpd_register_uri_handler(server, &ota_post_uri);
 
     return ESP_OK;
 err_start:

@@ -46,12 +46,11 @@
 #include "74AHC595.h"
 
 /* Macros for setting a key in a variable */
-
-
-
 #define SET_KEY(state, key)    ((state) |= (key))      		/* Set bit to 1 */
 #define CLEAR_KEY(state, key)  ((state) &= ~(key))    		/* Set bit to 0 */
 #define CHECK_KEY(state, key)  (((state) & (key)) != 0)		/* Is bit set?	*/
+
+#define FIRM "FIRMWARE"
 
 enum  pp_alert_t{
 	NONE = 0x0000,

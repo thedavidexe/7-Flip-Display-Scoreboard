@@ -4,7 +4,9 @@ idf_component_register(SRCS "main.c"
 							"74AHC595.c"
 							"esp_rest_main.c"
 							"mqtt_com.c"
-                    INCLUDE_DIRS ".")
+							"ota.c"
+                    INCLUDE_DIRS "."
+                    EMBED_TXTFILES ${project_dir}/server_certs/ca_cert.pem)
                    
 set(WEB_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../front")
 if(NOT EXISTS "${WEB_SRC_DIR}/dist")

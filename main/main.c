@@ -35,17 +35,18 @@ status_t status = {};
 
 void app_main(void)
 {
+	ESP_LOGI(FIRM, "Version: 0.0.2");
+	
     /* Start all tasks */
     xTaskCreate(RestfulServerTask, "RestfulServerTask", 4048, NULL, 1, NULL);
     xTaskCreate(mqtt_task, "MqttTask", 4096, NULL, 5, NULL);
-    
     
     shift_register_init();
     detect_display_count();
    
     //DisplayNumber(2);
-    DisplaySymbol(0x159A, 2);
-    DisplaySymbol(0x199A, 1);
+    DisplaySymbol(0x159A, 1);
+    DisplaySymbol(0x199A, 2);
     
     while(1)
     {
