@@ -16,7 +16,6 @@
 #include "esp_log.h"
 #include "esp_vfs.h"
 #include "cJSON.h"
-
 #include "74AHC595.h"
 #include "main.h"
 #include "esp_wifi.h"
@@ -176,22 +175,19 @@ static esp_err_t mqtt_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-/* Handler for POST /api/v1/ota */
-static esp_err_t ota_post_handler(httpd_req_t *req)
+/* Handler for POST /api/v1/ota/firmware */
+static esp_err_t ota_firmware_post_handler(httpd_req_t *req)
 {
     int total_len = req->content_len;
     int cur_len = 0;
     int received = 0;
-    // Use the scratch buffer from the rest_server_context
     char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
 
-    // Check if content length exceeds buffer size
     if (total_len >= SCRATCH_BUFSIZE) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Content too long");
         return ESP_FAIL;
     }
 
-    // Receive the POST data in chunks
     while (cur_len < total_len) {
         received = httpd_req_recv(req, buf + cur_len, total_len - cur_len);
         if (received <= 0) {
@@ -202,32 +198,72 @@ static esp_err_t ota_post_handler(httpd_req_t *req)
     }
     buf[cur_len] = '\0';
 
-    // Parse the JSON content
     cJSON *root = cJSON_Parse(buf);
-    if (root == NULL) {
+    if (!root) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
         return ESP_FAIL;
     }
-
-    // Extract the "url" field from the JSON
     cJSON *url_item = cJSON_GetObjectItem(root, "url");
-    if (url_item == NULL || !cJSON_IsString(url_item) || (url_item->valuestring == NULL)) {
+    if (!url_item || !cJSON_IsString(url_item)) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing or invalid 'url'");
         cJSON_Delete(root);
         return ESP_FAIL;
     }
 
-    // Call the OTA start function with the provided URL
-    esp_err_t ret = ota_start(url_item->valuestring);
+    // Inicjujemy OTA dla firmware – zakładamy, że OTA_TYPE_FIRMWARE jest zdefiniowany
+    esp_err_t ret = ota_start(url_item->valuestring, OTA_TYPE_FIRMWARE);
     cJSON_Delete(root);
-
     if (ret != ESP_OK) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to start OTA update");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to start firmware OTA update");
+        return ESP_FAIL;
+    }
+    httpd_resp_sendstr(req, "Firmware OTA update initiated");
+    return ESP_OK;
+}
+
+/* Handler for POST /api/v1/ota/web_app */
+static esp_err_t ota_web_app_post_handler(httpd_req_t *req)
+{
+    int total_len = req->content_len;
+    int cur_len = 0;
+    int received = 0;
+    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
+
+    if (total_len >= SCRATCH_BUFSIZE) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Content too long");
         return ESP_FAIL;
     }
 
-    // Respond with a success message
-    httpd_resp_sendstr(req, "OTA update initiated");
+    while (cur_len < total_len) {
+        received = httpd_req_recv(req, buf + cur_len, total_len - cur_len);
+        if (received <= 0) {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive data");
+            return ESP_FAIL;
+        }
+        cur_len += received;
+    }
+    buf[cur_len] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+    cJSON *url_item = cJSON_GetObjectItem(root, "url");
+    if (!url_item || !cJSON_IsString(url_item)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing or invalid 'url'");
+        cJSON_Delete(root);
+        return ESP_FAIL;
+    }
+
+    // Inicjujemy OTA dla aplikacji web – zakładamy, że OTA_TYPE_WEB_APP jest zdefiniowany
+    esp_err_t ret = ota_start(url_item->valuestring, OTA_TYPE_WEB_APP);
+    cJSON_Delete(root);
+    if (ret != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to start web app OTA update");
+        return ESP_FAIL;
+    }
+    httpd_resp_sendstr(req, "Web App OTA update initiated");
     return ESP_OK;
 }
 
@@ -426,47 +462,6 @@ static esp_err_t mqtt_post_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-/* Handler for POST /api/v1/score/my_score (example endpoint) */
-static esp_err_t score_post_handler(httpd_req_t *req)
-{
-    int total_len = req->content_len;
-    int cur_len = 0;
-    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
-    int received = 0;
-    if (total_len >= SCRATCH_BUFSIZE) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Content too long");
-        return ESP_FAIL;
-    }
-    // Receive the POST data in chunks
-    while (cur_len < total_len) {
-        received = httpd_req_recv(req, buf + cur_len, total_len - cur_len);
-        if (received <= 0) {
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive data");
-            return ESP_FAIL;
-        }
-        cur_len += received;
-    }
-    buf[cur_len] = '\0';
-
-    cJSON *root = cJSON_Parse(buf);
-    if (root == NULL) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_FAIL;
-    }
-    cJSON *score_item = cJSON_GetObjectItem(root, "score");
-    if (score_item == NULL || !cJSON_IsNumber(score_item)) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing or invalid 'score'");
-        cJSON_Delete(root);
-        return ESP_FAIL;
-    }
-    int score = score_item->valueint;
-    ESP_LOGI(REST_TAG, "Received score: %d", score);
-    DisplayNumber(score / 10);  // Update display with received score (example action)
-    cJSON_Delete(root);
-    httpd_resp_sendstr(req, "Score received successfully");
-    return ESP_OK;
-}
-
 /* Handler for GET /api/v1/display (returns current display value) */
 static esp_err_t display_get_handler(httpd_req_t *req)
 {
@@ -615,6 +610,7 @@ esp_err_t start_rest_server(const char *base_path)
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
+    config.max_uri_handlers = 16;
 
     ESP_LOGI(REST_TAG, "Starting HTTP Server");
     REST_CHECK(httpd_start(&server, &config) == ESP_OK, "Start server failed", err_start);
@@ -636,14 +632,6 @@ esp_err_t start_rest_server(const char *base_path)
     };
     httpd_register_uri_handler(server, &mqtt_post_uri);
     
-    httpd_uri_t score_post_uri = {
-        .uri      = "/api/v1/score/my_score",
-        .method   = HTTP_POST,
-        .handler  = score_post_handler,
-        .user_ctx = rest_context
-    };
-    httpd_register_uri_handler(server, &score_post_uri);
-
     httpd_uri_t display_get_uri = {
         .uri      = "/api/v1/display",
         .method   = HTTP_GET,
@@ -667,8 +655,26 @@ esp_err_t start_rest_server(const char *base_path)
         .user_ctx = rest_context
     };
     httpd_register_uri_handler(server, &mode_post_uri);
-
-    // Catch-all handler for static web content
+  
+	// Firmware update
+	httpd_uri_t ota_firmware_post_uri = {
+	  .uri      = "/api/v1/ota/firmware",
+	  .method   = HTTP_POST,
+	  .handler  = ota_firmware_post_handler,
+	  .user_ctx = rest_context
+	};
+	httpd_register_uri_handler(server, &ota_firmware_post_uri);
+	
+	// WEB App update
+	httpd_uri_t ota_web_app_post_uri = {
+	  .uri      = "/api/v1/ota/web_app",
+	  .method   = HTTP_POST,
+	  .handler  = ota_web_app_post_handler,
+	  .user_ctx = rest_context
+	};
+	httpd_register_uri_handler(server, &ota_web_app_post_uri);
+	
+	// Catch-all handler for static web content
     httpd_uri_t common_get_uri = {
         .uri      = "/*",
         .method   = HTTP_GET,
@@ -676,14 +682,6 @@ esp_err_t start_rest_server(const char *base_path)
         .user_ctx = rest_context
     };
     httpd_register_uri_handler(server, &common_get_uri);
-    
-    httpd_uri_t ota_post_uri = {
-	    .uri      = "/api/v1/ota",
-	    .method   = HTTP_POST,
-	    .handler  = ota_post_handler,
-	    .user_ctx = rest_context
-	};
-	httpd_register_uri_handler(server, &ota_post_uri);
 
     return ESP_OK;
 err_start:

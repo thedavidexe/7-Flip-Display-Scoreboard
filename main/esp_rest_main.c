@@ -64,9 +64,26 @@ static void initialise_mdns(void)
 
 esp_err_t init_fs(void)
 {
+    // Read the active partition flag from NVS
+    char active_www[8] = {0};
+    nvs_handle_t nvs;
+    if (nvs_open("storage", NVS_READONLY, &nvs) == ESP_OK) {
+        size_t len = sizeof(active_www);
+        if (nvs_get_str(nvs, "active_www", active_www, &len) != ESP_OK) {
+            // No flag set – default to "www_0"
+            strcpy(active_www, "www_0");
+        }
+        nvs_close(nvs);
+    } else {
+        // If there’s a problem with NVS, default to mounting "www_0"
+        strcpy(active_www, "www_0");
+    }
+
+    ESP_LOGI(SERVER, "Mounting web partition: %s", active_www);
+
     esp_vfs_spiffs_conf_t conf = {
         .base_path = CONFIG_EXAMPLE_WEB_MOUNT_POINT,
-        .partition_label = "www_0",
+        .partition_label = active_www,
         .max_files = 5,
         .format_if_mount_failed = true
     };
@@ -84,11 +101,11 @@ esp_err_t init_fs(void)
     }
 
     size_t total = 0, used = 0;
-    ret = esp_spiffs_info("www_0", &total, &used);
+    ret = esp_spiffs_info(active_www, &total, &used);
     if (ret != ESP_OK) {
         ESP_LOGE(SERVER, "Failed to get SPIFFS partition information (%s)", esp_err_to_name(ret));
     } else {
-        ESP_LOGI(SERVER, "Partition size: total: %d, used: %d", total, used);
+        ESP_LOGI(SERVER, "Partition %s size: total: %d, used: %d", active_www, total, used);
     }
     return ESP_OK;
 }

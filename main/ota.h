@@ -37,6 +37,12 @@
 extern "C" {
 #endif
 
+// Define OTA update type: firmware or web application (www)
+typedef enum {
+    OTA_TYPE_FIRMWARE,
+    OTA_TYPE_WEB_APP
+} ota_type_t;
+
 /**
  * @brief Starts an OTA update using the provided URL.
  *
@@ -46,7 +52,7 @@ extern "C" {
  * @param url The URL of the firmware binary file.
  * @return esp_err_t ESP_OK on success, or an appropriate error code on failure.
  */
-esp_err_t ota_start(const char *url);
+esp_err_t ota_start(const char *url, ota_type_t type);
 
 #ifdef __cplusplus
 }
