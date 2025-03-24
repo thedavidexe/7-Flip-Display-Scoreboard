@@ -34,7 +34,7 @@
 #define SERVER	"SERVER"
 #define MDNS_INSTANCE "7-Flip Display Server"
 #define CONFIG_EXAMPLE_MDNS_HOST_NAME "esp-home"
-#define CONFIG_EXAMPLE_WEB_MOUNT_POINT "/www"
+#define CONFIG_EXAMPLE_WEB_MOUNT_POINT "/www_0"
 
 /* Device Wi-Fi operating modes for persistent storage */
 #define MODE_AP  0   // Hotspot (Access Point) mode

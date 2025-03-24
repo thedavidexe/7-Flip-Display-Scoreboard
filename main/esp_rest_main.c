@@ -66,7 +66,7 @@ esp_err_t init_fs(void)
 {
     esp_vfs_spiffs_conf_t conf = {
         .base_path = CONFIG_EXAMPLE_WEB_MOUNT_POINT,
-        .partition_label = NULL,
+        .partition_label = "www_0",
         .max_files = 5,
         .format_if_mount_failed = true
     };
@@ -84,7 +84,7 @@ esp_err_t init_fs(void)
     }
 
     size_t total = 0, used = 0;
-    ret = esp_spiffs_info(NULL, &total, &used);
+    ret = esp_spiffs_info("www_0", &total, &used);
     if (ret != ESP_OK) {
         ESP_LOGE(SERVER, "Failed to get SPIFFS partition information (%s)", esp_err_to_name(ret));
     } else {
