@@ -3,29 +3,9 @@
  *
  *  Created on: 21 mar 2025
  *      Author: Sebastian Sokołowski
- *		Company: Smart Solutions for Home
+ *      Company: Smart Solutions for Home
  *
  * SPDX-License-Identifier: MIT
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is furnished
- * to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * This file is part of an open source project.
- * For more information, visit: https://smartsolutions4home.com/7-flip-display
  */
 
 #include "esp_rest_main.h"
@@ -41,11 +21,47 @@
 #include "esp_wifi.h"
 #include "esp_system.h"
 #include "esp_spiffs.h"
+#include <string.h>
+
+static void init_version_info() {
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open("storage", NVS_READWRITE, &nvs);
+    if (err == ESP_OK) {
+        size_t len;
+        char version_str[32] = {0};
+        
+        // Check web_app_version
+        len = sizeof(version_str);
+        err = nvs_get_str(nvs, "web_app_version", version_str, &len);
+        if(err != ESP_OK) {
+            ESP_LOGI("INIT", "web_app_version not found, setting default to 0.0.0 (error=%d)", err);
+            nvs_set_str(nvs, "web_app_version", "0.0.0");
+        } else {
+            ESP_LOGI("INIT", "web_app_version found: %s", version_str);
+        }
+        
+        // Check firm_version
+        len = sizeof(version_str);
+        err = nvs_get_str(nvs, "firm_version", version_str, &len);
+        if(err != ESP_OK) {
+            ESP_LOGI("INIT", "firm_version not found, setting default to 0.0.0 (error=%d)", err);
+            nvs_set_str(nvs, "firm_version", "0.0.0");
+        } else {
+            ESP_LOGI("INIT", "firm_version found: %s", version_str);
+        }
+            
+        
+        nvs_commit(nvs);
+        nvs_close(nvs);
+    } else {
+        ESP_LOGE("INIT", "Failed to open NVS for version initialization");
+    }
+}
 
 esp_err_t start_rest_server(const char *base_path);
 
 #define DEFAULT_AP_SSID "7-Flip-HotSpot"
-#define DEFAULT_AP_PASS "12345678"   // Default AP password (8+ chars for WPA2, empty = open network)
+#define DEFAULT_AP_PASS "12345678"   // Default AP password
 
 static void initialise_mdns(void)
 {
@@ -75,7 +91,6 @@ esp_err_t init_fs(void)
         }
         nvs_close(nvs);
     } else {
-        // If there’s a problem with NVS, default to mounting "www_0"
         strcpy(active_www, "www_0");
     }
 
@@ -110,13 +125,47 @@ esp_err_t init_fs(void)
     return ESP_OK;
 }
 
+// Force active web partition to "www_0" if it is set to "www_1"
+// This should be executed only once after flashing from the IDE.
+void SetDefaultPartition(void)
+{
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open("storage", NVS_READWRITE, &nvs);
+    if (err == ESP_OK) {
+        char active_www[8] = {0};
+        size_t len = sizeof(active_www);
+        // Try to read the active_www value from NVS
+        if (nvs_get_str(nvs, "active_www", active_www, &len) == ESP_OK) {
+            // If the value is "www_1", force it to "www_0"
+            if (strcmp(active_www, "www_1") == 0) {
+                ESP_LOGI(SERVER, "Forcing active web partition to www_0 after flash");
+                nvs_set_str(nvs, "active_www", "www_0");
+                nvs_commit(nvs);
+            }
+        } else {
+            // If key not found, set default to "www_0"
+            nvs_set_str(nvs, "active_www", "www_0");
+            nvs_commit(nvs);
+        }
+        nvs_close(nvs);
+    } else {
+        ESP_LOGE(SERVER, "Failed to open NVS for active_www check");
+    }	
+}
+
 void RestfulServerTask(void *arg)
 {
     ESP_LOGI(SERVER, "Initializing the server...");
     // Initialize NVS, network interfaces, and default event loop
     ESP_ERROR_CHECK(nvs_flash_init());
+    SetDefaultPartition();
+    
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    // Initialize version information in NVS if not already set
+    init_version_info();
+
     initialise_mdns();
     netbiosns_init();
     netbiosns_set_name(CONFIG_EXAMPLE_MDNS_HOST_NAME);
@@ -136,7 +185,6 @@ void RestfulServerTask(void *arg)
     char ssid[33] = {0};
     char password[65] = {0};
     if (mode == MODE_STA) {
-        // Read stored SSID and password for Station mode
         size_t ssid_len = sizeof(ssid);
         size_t pass_len = sizeof(password);
         if (nvs_get_str(nvs, "ssid", ssid, &ssid_len) != ESP_OK ||
@@ -153,14 +201,12 @@ void RestfulServerTask(void *arg)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     if (mode == MODE_STA) {
-        sta_netif = esp_netif_create_default_wifi_sta();  // create Wi-Fi station interface
+        sta_netif = esp_netif_create_default_wifi_sta();
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-        // Configure Wi-Fi station with stored SSID/password
         wifi_config_t wifi_config = {};
         strlcpy((char*)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
         strlcpy((char*)wifi_config.sta.password, password, sizeof(wifi_config.sta.password));
         if (strlen(password) == 0) {
-            // Allow connection to open network if password is empty
             wifi_config.sta.threshold.authmode = WIFI_AUTH_OPEN;
         } else {
             wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
@@ -171,7 +217,6 @@ void RestfulServerTask(void *arg)
         ESP_ERROR_CHECK(esp_wifi_start());
         ESP_ERROR_CHECK(esp_wifi_connect());
 
-        // Wait up to 30 seconds for Wi-Fi connection (check for IP address)
         ESP_LOGI(SERVER, "Connecting to Wi-Fi: SSID=\"%s\"", ssid);
         bool connected = false;
         esp_netif_ip_info_t ip_info;
@@ -186,9 +231,8 @@ void RestfulServerTask(void *arg)
         if (!connected) {
             ESP_LOGW(SERVER, "Failed to connect in STA mode, enabling Hotspot (AP) mode");
             ESP_ERROR_CHECK(esp_wifi_stop());
-            // Switch to Access Point mode (Hotspot) after failed STA connect
             if (!ap_netif) {
-                ap_netif = esp_netif_create_default_wifi_ap();  // create Wi-Fi AP interface
+                ap_netif = esp_netif_create_default_wifi_ap();
             }
             wifi_config_t ap_config = {};
             strlcpy((char*)ap_config.ap.ssid, DEFAULT_AP_SSID, sizeof(ap_config.ap.ssid));
@@ -208,7 +252,6 @@ void RestfulServerTask(void *arg)
             ESP_LOGI(SERVER, "Connected to Wi-Fi network, IP: " IPSTR, IP2STR(&ip_info.ip));
         }
     } else {
-        // Start in Access Point mode (Hotspot) by default
         ap_netif = esp_netif_create_default_wifi_ap();
         wifi_config_t ap_config = {};
         strlcpy((char*)ap_config.ap.ssid, DEFAULT_AP_SSID, sizeof(ap_config.ap.ssid));
@@ -225,7 +268,6 @@ void RestfulServerTask(void *arg)
         ESP_LOGI(SERVER, "Hotspot started with SSID: %s", DEFAULT_AP_SSID);
     }
 
-    // Initialize SPIFFS and start the RESTful web server (serving Vue app and API)
     ESP_ERROR_CHECK(init_fs());
     ESP_ERROR_CHECK(start_rest_server(CONFIG_EXAMPLE_WEB_MOUNT_POINT));
     ESP_LOGI(SERVER, "Server started");

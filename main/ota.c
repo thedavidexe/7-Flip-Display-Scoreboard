@@ -3,29 +3,9 @@
  *
  *  Created on: 23 mar 2025
  *      Author: Sebastian Sokołowski
- *		Company: Smart Solutions for Home
+ *      Company: Smart Solutions for Home
  *
  * SPDX-License-Identifier: MIT
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is furnished
- * to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * This file is part of an open source project.
- * For more information, visit: https://smartsolutions4home.com/7-flip-display
  */
 
 #include "ota.h"
@@ -44,14 +24,25 @@ static const char *TAG = "OTA";
 extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
 extern const uint8_t server_cert_pem_end[] asm("_binary_ca_cert_pem_end");
 
+// Global variable to track OTA progress (0-100%)
+volatile int ota_progress = 0;
+
+// Helper function to extract version string from URL
+// It searches for prefix and suffix and extracts the string in between.
+static void extract_version_from_url(const char *url, const char *prefix, const char *suffix, char *version, size_t version_size) {
+    const char *start = strstr(url, prefix);
+    if (start) {
+        start += strlen(prefix);
+        const char *end = strstr(start, suffix);
+        if (end && (end - start) < version_size) {
+            strncpy(version, start, end - start);
+            version[end - start] = '\0';
+        }
+    }
+}
 
 /**
  * @brief HTTP event handler for OTA update.
- *
- * This function logs HTTP events during the OTA process.
- *
- * @param evt Pointer to the HTTP client event structure.
- * @return esp_err_t ESP_OK.
  */
 static esp_err_t ota_http_event_handler(esp_http_client_event_t *evt)
 {
@@ -84,16 +75,12 @@ static esp_err_t ota_http_event_handler(esp_http_client_event_t *evt)
 }
 
 /**
- * @brief OTA update task.
- *
- * This task downloads the firmware from the given URL and performs the OTA update.
- *
- * @param pvParameter Pointer to a string containing the OTA URL.
+ * @brief OTA firmware update task.
  */
 static void ota_firmware_task(void *pvParameter)
 {
     char *ota_url = (char *)pvParameter;
-    ESP_LOGI(TAG, "Starting OTA update from URL: %s", ota_url);
+    ESP_LOGI(TAG, "Starting firmware OTA update from URL: %s", ota_url);
 
     esp_http_client_config_t config = {
         .url = ota_url,
@@ -106,13 +93,52 @@ static void ota_firmware_task(void *pvParameter)
         .http_config = &config,
     };
 
-    esp_err_t ret = esp_https_ota(&ota_config);
+    esp_https_ota_handle_t https_ota_handle = NULL;
+    esp_err_t ret = esp_https_ota_begin(&ota_config, &https_ota_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "esp_https_ota_begin failed (%d)", ret);
+        free(ota_url);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    while (1) {
+        ret = esp_https_ota_perform(https_ota_handle);
+        if (ret == ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
+            size_t image_len_read = esp_https_ota_get_image_len_read(https_ota_handle);
+            size_t image_size = esp_https_ota_get_image_size(https_ota_handle);
+            if (image_size > 0) {
+                ota_progress = (image_len_read * 100) / image_size;
+            }
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+        } else {
+            break;
+        }
+    }
+
     if (ret == ESP_OK) {
-        ESP_LOGI(TAG, "OTA update successful, restarting...");
+        ESP_LOGI(TAG, "Firmware OTA update successful, finalizing update...");
+        ret = esp_https_ota_finish(https_ota_handle);
+
+        // Extract version from URL: assume URL contains "firmware_v<version>.bin"
+        char new_version[32] = {0};
+        extract_version_from_url(ota_url, "firmware_v", ".bin", new_version, sizeof(new_version));
+
+        // Update firmware version in NVS
+        nvs_handle_t nvs;
+        if(nvs_open("storage", NVS_READWRITE, &nvs) == ESP_OK) {
+            nvs_set_str(nvs, "firm_version", new_version);
+            nvs_commit(nvs);
+            nvs_close(nvs);
+            ESP_LOGI(TAG, "Firmware version updated in NVS: %s", new_version);
+        } else {
+            ESP_LOGE(TAG, "Failed to open NVS to update firmware version");
+        }
+
         free(ota_url);
         esp_restart();
     } else {
-        ESP_LOGE(TAG, "OTA update failed with error: %d", ret);
+        ESP_LOGE(TAG, "Firmware OTA update failed with error: %d", ret);
     }
     free(ota_url);
     vTaskDelete(NULL);
@@ -120,30 +146,20 @@ static void ota_firmware_task(void *pvParameter)
 
 /**
  * @brief OTA web update task.
- *
- * This task downloads the web application binary from the given URL and writes it to the inactive web partition.
- *
- * Note: Switching the active www partition is application-specific. You must implement the logic
- * to mark the updated partition as active.
- *
- * @param pvParameter Pointer to a string containing the OTA URL.
  */
 static void ota_web_app_task(void *pvParameter)
 {
     char *ota_url = (char *)pvParameter;
     ESP_LOGI(TAG, "Starting web (www) OTA update from URL: %s", ota_url);
 
-    // Open NVS and read active partition flag
     char active_www[8] = {0};
     char passive_label[8] = {0};
     nvs_handle_t nvs = 0;
     if (nvs_open("storage", NVS_READWRITE, &nvs) == ESP_OK) {
         size_t len = sizeof(active_www);
         if (nvs_get_str(nvs, "active_www", active_www, &len) != ESP_OK) {
-            // If no flag is found, assume www_0 is active by default
             strcpy(active_www, "www_0");
         }
-        // Determine the inactive (passive) partition label
         if (strcmp(active_www, "www_0") == 0) {
             strcpy(passive_label, "www_1");
         } else {
@@ -154,7 +170,6 @@ static void ota_web_app_task(void *pvParameter)
         strcpy(passive_label, "www_1");
     }
 
-    // Find the inactive web partition using the passive label
     const esp_partition_t *update_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, passive_label);
     if (update_partition == NULL) {
         ESP_LOGE(TAG, "Inactive web partition (%s) not found", passive_label);
@@ -166,7 +181,6 @@ static void ota_web_app_task(void *pvParameter)
         return;
     }
 
-    // Erase the inactive partition before starting the HTTP connection
     ESP_LOGI(TAG, "Erasing inactive web partition: %s", update_partition->label);
     esp_err_t err = esp_partition_erase_range(update_partition, 0, update_partition->size);
     if (err != ESP_OK) {
@@ -179,7 +193,6 @@ static void ota_web_app_task(void *pvParameter)
         return;
     }
 
-    // Configure HTTP client without an event handler to avoid consuming data in the event callback
     esp_http_client_config_t config = {
         .url = ota_url,
         .timeout_ms = 10000,
@@ -210,7 +223,6 @@ static void ota_web_app_task(void *pvParameter)
         return;
     }
 
-    // Optionally fetch headers to obtain content length
     int content_length = esp_http_client_fetch_headers(client);
     if (content_length < 0) {
         ESP_LOGE(TAG, "Failed to fetch HTTP headers");
@@ -225,7 +237,6 @@ static void ota_web_app_task(void *pvParameter)
     }
     ESP_LOGI(TAG, "Content length: %d", content_length);
 
-    // Read data from HTTP and write to the inactive partition
     int total_written = 0;
     char buffer[1024];
     int bytes_read = 0;
@@ -243,6 +254,7 @@ static void ota_web_app_task(void *pvParameter)
             return;
         }
         total_written += bytes_read;
+        ota_progress = (total_written * 100) / content_length;
         ESP_LOGI(TAG, "Written %d bytes to web partition", total_written);
     }
 
@@ -258,11 +270,9 @@ static void ota_web_app_task(void *pvParameter)
         return;
     }
 
-    // Clean up the HTTP client
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
 
-    // Validate the downloaded image (ensure more than 0 bytes were written)
     if (total_written <= 0) {
         ESP_LOGE(TAG, "Downloaded image is invalid");
         if (nvs) {
@@ -275,7 +285,6 @@ static void ota_web_app_task(void *pvParameter)
 
     ESP_LOGI(TAG, "Web OTA update successful. New web partition (%s) written (%d bytes).", update_partition->label, total_written);
 
-    // Update the active partition flag in NVS to mark the newly written partition as active
     if (nvs) {
         err = nvs_set_str(nvs, "active_www", passive_label);
         if (err == ESP_OK) {
@@ -284,40 +293,274 @@ static void ota_web_app_task(void *pvParameter)
         } else {
             ESP_LOGE(TAG, "Failed to update active web partition flag in NVS");
         }
+        // Extract web app version from URL: assume URL contains "web_app_v<version>.bin"
+        char new_version[32] = {0};
+        extract_version_from_url(ota_url, "web_app_v", ".bin", new_version, sizeof(new_version));
+        err = nvs_set_str(nvs, "web_app_version", new_version);
+        if (err == ESP_OK) {
+            nvs_commit(nvs);
+            ESP_LOGI(TAG, "Web app version updated in NVS: %s", new_version);
+        } else {
+            ESP_LOGE(TAG, "Failed to update web app version in NVS");
+        }
         nvs_close(nvs);
     }
 
     free(ota_url);
-    // Restart the device to apply the new web application image
     esp_restart();
     vTaskDelete(NULL);
 }
 
+/**
+ * @brief Combined OTA update task for both web app and firmware.
+ */
+static void ota_both_task(void *pvParameter)
+{
+    ota_both_param_t *param = (ota_both_param_t *)pvParameter;
+    char *web_url = param->web_app_url;
+    char *firmware_url = param->firmware_url;
+    int ret;
+    free(param);
+
+    ESP_LOGI(TAG, "Starting combined OTA update.");
+    
+    // ----------- Web App Update Phase (0-50% progress) -----------
+    char active_www[8] = {0};
+    char passive_label[8] = {0};
+    nvs_handle_t nvs = 0;
+    if (nvs_open("storage", NVS_READWRITE, &nvs) == ESP_OK) {
+        size_t len = sizeof(active_www);
+        if (nvs_get_str(nvs, "active_www", active_www, &len) != ESP_OK) {
+            strcpy(active_www, "www_0");
+        }
+        if (strcmp(active_www, "www_0") == 0) {
+            strcpy(passive_label, "www_1");
+        } else {
+            strcpy(passive_label, "www_0");
+        }
+    } else {
+        ESP_LOGW(TAG, "Failed to open NVS, defaulting passive partition to www_1");
+        strcpy(passive_label, "www_1");
+    }
+
+    const esp_partition_t *update_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, passive_label);
+    if (update_partition == NULL) {
+        ESP_LOGE(TAG, "Inactive web partition (%s) not found", passive_label);
+        if (nvs) {
+            nvs_close(nvs);
+        }
+        free(web_url);
+        free(firmware_url);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    ESP_LOGI(TAG, "Erasing inactive web partition: %s", update_partition->label);
+    esp_err_t err = esp_partition_erase_range(update_partition, 0, update_partition->size);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to erase web partition: %s", esp_err_to_name(err));
+        if (nvs) {
+            nvs_close(nvs);
+        }
+        free(web_url);
+        free(firmware_url);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    esp_http_client_config_t config_web = {
+        .url = web_url,
+        .timeout_ms = 10000,
+        .cert_pem = (char *)server_cert_pem_start,
+        .method = HTTP_METHOD_GET,
+    };
+
+    esp_http_client_handle_t client_web = esp_http_client_init(&config_web);
+    if (client_web == NULL) {
+        ESP_LOGE(TAG, "Failed to initialise HTTP connection for web OTA");
+        if (nvs) {
+            nvs_close(nvs);
+        }
+        free(web_url);
+        free(firmware_url);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    err = esp_http_client_open(client_web, 0);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open HTTP connection for web OTA: %s", esp_err_to_name(err));
+        esp_http_client_cleanup(client_web);
+        if (nvs) {
+            nvs_close(nvs);
+        }
+        free(web_url);
+        free(firmware_url);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    int content_length_web = esp_http_client_fetch_headers(client_web);
+    if (content_length_web < 0) {
+        ESP_LOGE(TAG, "Failed to fetch HTTP headers for web OTA");
+        esp_http_client_close(client_web);
+        esp_http_client_cleanup(client_web);
+        if (nvs) {
+            nvs_close(nvs);
+        }
+        free(web_url);
+        free(firmware_url);
+        vTaskDelete(NULL);
+        return;
+    }
+    ESP_LOGI(TAG, "Web OTA content length: %d", content_length_web);
+
+    int total_written_web = 0;
+    char buffer_web[1024];
+    int bytes_read_web = 0;
+    while ((bytes_read_web = esp_http_client_read(client_web, buffer_web, sizeof(buffer_web))) > 0) {
+        err = esp_partition_write(update_partition, total_written_web, buffer_web, bytes_read_web);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Error writing to web partition during combined OTA: %s", esp_err_to_name(err));
+            esp_http_client_close(client_web);
+            esp_http_client_cleanup(client_web);
+            if (nvs) {
+                nvs_close(nvs);
+            }
+            free(web_url);
+            free(firmware_url);
+            vTaskDelete(NULL);
+            return;
+        }
+        total_written_web += bytes_read_web;
+        // Scale progress for web OTA phase (0 to 50%)
+        ota_progress = (total_written_web * 50) / content_length_web;
+        ESP_LOGI(TAG, "Combined OTA - Web phase: Written %d bytes", total_written_web);
+    }
+
+    if (bytes_read_web < 0) {
+        ESP_LOGE(TAG, "Error during receiving web update data in combined OTA");
+        esp_http_client_close(client_web);
+        esp_http_client_cleanup(client_web);
+        if (nvs) {
+            nvs_close(nvs);
+        }
+        free(web_url);
+        free(firmware_url);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    esp_http_client_close(client_web);
+    esp_http_client_cleanup(client_web);
+
+    ESP_LOGI(TAG, "Web OTA phase completed in combined update. Total written: %d bytes", total_written_web);
+
+    // Update active web partition and web app version in NVS (but do not reboot yet)
+    if (nvs) {
+        err = nvs_set_str(nvs, "active_www", passive_label);
+        if (err == ESP_OK) {
+            nvs_commit(nvs);
+            ESP_LOGI(TAG, "Active web partition updated to: %s", passive_label);
+        } else {
+            ESP_LOGE(TAG, "Failed to update active web partition flag in NVS during combined OTA");
+        }
+        char new_web_version[32] = {0};
+        extract_version_from_url(web_url, "web_app_v", ".bin", new_web_version, sizeof(new_web_version));
+        err = nvs_set_str(nvs, "web_app_version", new_web_version);
+        if (err == ESP_OK) {
+            nvs_commit(nvs);
+            ESP_LOGI(TAG, "Web app version updated in NVS: %s", new_web_version);
+        } else {
+            ESP_LOGE(TAG, "Failed to update web app version in NVS during combined OTA");
+        }
+        nvs_close(nvs);
+    }
+
+    free(web_url);
+
+    // ----------- Firmware Update Phase (progress from 50% to 100%) -----------
+    ESP_LOGI(TAG, "Starting firmware OTA phase in combined update from URL: %s", firmware_url);
+
+    esp_http_client_config_t config_fw = {
+        .url = firmware_url,
+        .event_handler = ota_http_event_handler,
+        .timeout_ms = 10000,
+        .cert_pem = (char *)server_cert_pem_start,
+    };
+
+    esp_https_ota_config_t ota_config_fw = {
+        .http_config = &config_fw,
+    };
+
+    esp_https_ota_handle_t https_ota_handle = NULL;
+    ret = esp_https_ota_begin(&ota_config_fw, &https_ota_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "esp_https_ota_begin failed in combined OTA (%d)", ret);
+        free(firmware_url);
+        vTaskDelete(NULL);
+        return;
+    }
+
+    while (1) {
+        ret = esp_https_ota_perform(https_ota_handle);
+        if (ret == ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
+            size_t image_len_read = esp_https_ota_get_image_len_read(https_ota_handle);
+            size_t image_size = esp_https_ota_get_image_size(https_ota_handle);
+            if (image_size > 0) {
+                int fw_progress = (image_len_read * 50) / image_size;
+                ota_progress = 50 + fw_progress;
+            }
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+        } else {
+            break;
+        }
+    }
+
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Firmware OTA phase completed in combined update.");
+        ret = esp_https_ota_finish(https_ota_handle);
+
+        char new_fw_version[32] = {0};
+        extract_version_from_url(firmware_url, "firmware_v", ".bin", new_fw_version, sizeof(new_fw_version));
+        nvs_handle_t nvs_fw;
+        if(nvs_open("storage", NVS_READWRITE, &nvs_fw) == ESP_OK) {
+            nvs_set_str(nvs_fw, "firm_version", new_fw_version);
+            nvs_commit(nvs_fw);
+            nvs_close(nvs_fw);
+            ESP_LOGI(TAG, "Firmware version updated in NVS: %s", new_fw_version);
+        } else {
+            ESP_LOGE(TAG, "Failed to open NVS to update firmware version in combined OTA");
+        }
+        free(firmware_url);
+        esp_restart();
+    } else {
+        ESP_LOGE(TAG, "Firmware OTA phase failed in combined update with error: %d", ret);
+    }
+    free(firmware_url);
+    vTaskDelete(NULL);
+}
 
 /**
  * @brief Starts the OTA update process.
- *
- * This function duplicates the provided URL and creates a FreeRTOS task to perform the OTA update.
- *
- * @param url The URL of the firmware binary.
- * @return esp_err_t ESP_OK on successful task creation, error code otherwise.
  */
 esp_err_t ota_start(const char *url, ota_type_t type)
 {
     if (url == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
-    // Duplicate the URL string to pass it to the OTA task.
     char *ota_url = strdup(url);
     if (ota_url == NULL) {
         return ESP_ERR_NO_MEM;
     }
-    // Create the OTA task.
     BaseType_t result;
     if (type == OTA_TYPE_FIRMWARE) {
         result = xTaskCreate(ota_firmware_task, "ota_firmware_task", 8192, ota_url, 3, NULL);
     } else if (type == OTA_TYPE_WEB_APP) {
         result = xTaskCreate(ota_web_app_task, "ota_web_app_task", 8192, ota_url, 3, NULL);
+    } else if (type == OTA_TYPE_BOTH) {
+        free(ota_url);
+        return ESP_ERR_INVALID_ARG;
     } else {
         free(ota_url);
         return ESP_ERR_INVALID_ARG;
@@ -325,6 +568,36 @@ esp_err_t ota_start(const char *url, ota_type_t type)
 
     if (result != pdPASS) {
         free(ota_url);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+/**
+ * @brief Starts the combined OTA update process for both firmware and web app.
+ */
+esp_err_t ota_start_both(const char *firmware_url, const char *web_app_url)
+{
+    if (firmware_url == NULL || web_app_url == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    ota_both_param_t *param = malloc(sizeof(ota_both_param_t));
+    if (!param) {
+        return ESP_ERR_NO_MEM;
+    }
+    param->firmware_url = strdup(firmware_url);
+    param->web_app_url = strdup(web_app_url);
+    if (!param->firmware_url || !param->web_app_url) {
+        free(param->firmware_url);
+        free(param->web_app_url);
+        free(param);
+        return ESP_ERR_NO_MEM;
+    }
+    BaseType_t result = xTaskCreate(ota_both_task, "ota_both_task", 10240, param, 3, NULL);
+    if (result != pdPASS) {
+        free(param->firmware_url);
+        free(param->web_app_url);
+        free(param);
         return ESP_FAIL;
     }
     return ESP_OK;

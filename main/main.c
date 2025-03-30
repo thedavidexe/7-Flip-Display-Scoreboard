@@ -35,7 +35,7 @@ status_t status = {};
 
 void app_main(void)
 {
-	ESP_LOGI(FIRM, "Version: 0.0.4");
+	ESP_LOGI(FIRM, "Version: 0.0.5");
 	
     /* Start all tasks */
     xTaskCreate(RestfulServerTask, "RestfulServerTask", 4048, NULL, 1, NULL);
