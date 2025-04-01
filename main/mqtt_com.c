@@ -40,6 +40,14 @@
 
 static const char *MQTT_TAG = "MQTT";
 
+/* Hardcoded MQTT topics */
+static const char *hardcoded_topics[] = {
+    "mqtt-get-data",
+    "number"
+    // Add more topics as needed
+};
+static const int num_hardcoded_topics = sizeof(hardcoded_topics) / sizeof(hardcoded_topics[0]);
+
 /** MQTT client handle */
 static esp_mqtt_client_handle_t client = NULL;
 /** Current MQTT connection status */
@@ -112,12 +120,6 @@ static void mqtt_load_config_from_nvs(void) {
     if (err != ESP_OK) {
         mqtt_cfg.password[0] = '\0';
     }
-    len = sizeof(mqtt_cfg.topics);
-    if (nvs_get_str(nvs, "mqtt_topics", mqtt_cfg.topics, &len) != ESP_OK) {
-        strcpy(mqtt_cfg.topics, "mqtt-get-data");
-        ESP_LOGW(MQTT_TAG, "MQTT topics not found, defaulting to 'mqtt-get-data'");
-    }
-    nvs_close(nvs);
 }
 
 /**
@@ -131,27 +133,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(MQTT_TAG, "Connected to MQTT broker");
             mqtt_connected = true;
-            // Subscribe to all topics from configuration
-            if (mqtt_cfg.topics[0] != '\0') {
-                char topics_copy[MQTT_MAX_TOPICS_LEN + 1];
-                strncpy(topics_copy, mqtt_cfg.topics, sizeof(topics_copy));
-                topics_copy[sizeof(topics_copy) - 1] = '\0';
-                char *topic = strtok(topics_copy, ",");
-                while (topic) {
-                    // Trim whitespace
-                    while (*topic == ' ' || *topic == '\t') { topic++; }
-                    char *end = topic + strlen(topic) - 1;
-                    while (end >= topic && (*end == ' ' || *end == '\t')) {
-                        *end = '\0';
-                        end--;
-                    }
-                    if (*topic != '\0') {
-                        esp_mqtt_client_subscribe(client, topic, 1);
-                        ESP_LOGI(MQTT_TAG, "Subscribed to topic: %s", topic);
-                    }
-                    topic = strtok(NULL, ",");
-                }
-            }
+            // Subscribe to all topics from Hardcoded MQTT topics
+			for (int i = 0; i < num_hardcoded_topics; i++) {
+			    esp_mqtt_client_subscribe(client, hardcoded_topics[i], 1);
+			    ESP_LOGI(MQTT_TAG, "Subscribed to hardcoded topic: %s", hardcoded_topics[i]);
+			}
             break;
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGW(MQTT_TAG, "Disconnected from MQTT broker");
@@ -168,7 +154,21 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             data_buf[dlen] = '\0';
             ESP_LOGI(MQTT_TAG, "Received MQTT data on topic '%s': %s", topic_buf, data_buf);
             
-            DisplayNumber((uint32_t)strtoul(data_buf, NULL, 10));
+            
+            if(strcmp(topic_buf, "mqtt-get-data") == 0) 
+            {
+			    DisplayNumber((uint32_t)strtoul(data_buf, NULL, 10));
+			} 
+			else if(strcmp(topic_buf, "number") == 0) 
+			{
+			    DisplayNumber((uint32_t)strtoul(data_buf, NULL, 10));
+			} 
+			else 
+			{
+				//Display "Err"
+				DisplaySymbol(0x1656, 2);
+				DisplaySymbol(0x1A9A, 1);
+			}
             
             break;
         }

@@ -23,6 +23,8 @@
 #include "esp_spiffs.h"
 #include <string.h>
 
+//#define PROGRAMMED_FROM_IDE
+
 static void init_version_info() {
     nvs_handle_t nvs;
     esp_err_t err = nvs_open("storage", NVS_READWRITE, &nvs);
@@ -96,14 +98,27 @@ esp_err_t init_fs(void)
 
     ESP_LOGI(SERVER, "Mounting web partition: %s", active_www);
 
-    esp_vfs_spiffs_conf_t conf = {
-        .base_path = CONFIG_EXAMPLE_WEB_MOUNT_POINT,
-        .partition_label = active_www,
-        .max_files = 5,
-        .format_if_mount_failed = true
-    };
-    esp_err_t ret = esp_vfs_spiffs_register(&conf);
-
+	static esp_err_t ret;
+	
+	if(strcmp(active_www, "www_1") == 0)
+	{
+	    esp_vfs_spiffs_conf_t conf = {
+	        .base_path = CONFIG_WWW_1_MOUNT_POINT,
+	        .partition_label = active_www,
+	        .max_files = 5,
+	        .format_if_mount_failed = true
+	    };
+	     ret = esp_vfs_spiffs_register(&conf);
+    } else {
+	    esp_vfs_spiffs_conf_t conf = {
+	        .base_path = CONFIG_WWW_0_MOUNT_POINT,
+	        .partition_label = active_www,
+	        .max_files = 5,
+	        .format_if_mount_failed = true
+	    };
+	     ret = esp_vfs_spiffs_register(&conf);
+    }
+   
     if (ret != ESP_OK) {
         if (ret == ESP_FAIL) {
             ESP_LOGE(SERVER, "Failed to mount or format filesystem");
@@ -158,7 +173,10 @@ void RestfulServerTask(void *arg)
     ESP_LOGI(SERVER, "Initializing the server...");
     // Initialize NVS, network interfaces, and default event loop
     ESP_ERROR_CHECK(nvs_flash_init());
+
+#ifdef PROGRAMMED_FROM_IDE    
     SetDefaultPartition();
+#endif
     
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -269,7 +287,25 @@ void RestfulServerTask(void *arg)
     }
 
     ESP_ERROR_CHECK(init_fs());
-    ESP_ERROR_CHECK(start_rest_server(CONFIG_EXAMPLE_WEB_MOUNT_POINT));
+    
+	char active_www[8] = {0};
+	
+	if (nvs_open("storage", NVS_READONLY, &nvs) == ESP_OK) {
+	    size_t len = sizeof(active_www);
+	    if (nvs_get_str(nvs, "active_www", active_www, &len) != ESP_OK) {
+	        strcpy(active_www, "www_0");
+	    }
+	    nvs_close(nvs);
+	} else {
+	    strcpy(active_www, "www_0");
+	}
+	
+	if (strcmp(active_www, "www_0") == 0) {
+	    ESP_ERROR_CHECK(start_rest_server(CONFIG_WWW_0_MOUNT_POINT));
+	} else {
+	    ESP_ERROR_CHECK(start_rest_server(CONFIG_WWW_1_MOUNT_POINT));
+	}
+
     ESP_LOGI(SERVER, "Server started");
 
     vTaskDelete(NULL);

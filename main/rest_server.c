@@ -377,10 +377,11 @@ static esp_err_t mqtt_post_handler(httpd_req_t *req)
     nvs_get_str(nvs, "mqtt_user", new_user, &len);
     char new_pass[65] = ""; len = sizeof(new_pass);
     nvs_get_str(nvs, "mqtt_pass", new_pass, &len);
-    char new_topics[257] = ""; len = sizeof(new_topics);
-    if (nvs_get_str(nvs, "mqtt_topics", new_topics, &len) != ESP_OK) {
-        strcpy(new_topics, "mqtt-get-data");
-    }
+    
+//    char new_topics[257] = ""; len = sizeof(new_topics);
+//    if (nvs_get_str(nvs, "mqtt_topics", new_topics, &len) != ESP_OK) {
+//        strcpy(new_topics, "mqtt-get-data");
+//    }
 
     cJSON *item;
     item = cJSON_GetObjectItem(root, "enabled");
@@ -452,47 +453,6 @@ static esp_err_t mqtt_post_handler(httpd_req_t *req)
         }
         strcpy(new_pass, item->valuestring);
     }
-    item = cJSON_GetObjectItem(root, "topics");
-    if (item) {
-        if (cJSON_IsArray(item)) {
-            new_topics[0] = '\0';
-            bool first = true;
-            cJSON *topic_elem;
-            cJSON_ArrayForEach(topic_elem, item) {
-                if (!cJSON_IsString(topic_elem) || topic_elem->valuestring == NULL) {
-                    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid topic in list");
-                    cJSON_Delete(root); nvs_close(nvs);
-                    return ESP_FAIL;
-                }
-                if (strlen(topic_elem->valuestring) == 0) {
-                    continue;
-                }
-                if (!first) {
-                    if (strlen(new_topics) + 1 < sizeof(new_topics)) {
-                        strcat(new_topics, ",");
-                    }
-                }
-                first = false;
-                if (strlen(new_topics) + strlen(topic_elem->valuestring) >= sizeof(new_topics)) {
-                    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Topics list too long");
-                    cJSON_Delete(root); nvs_close(nvs);
-                    return ESP_FAIL;
-                }
-                strcat(new_topics, topic_elem->valuestring);
-            }
-        } else if (cJSON_IsString(item) && item->valuestring != NULL) {
-            if (strlen(item->valuestring) >= sizeof(new_topics)) {
-                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Topics string too long");
-                cJSON_Delete(root); nvs_close(nvs);
-                return ESP_FAIL;
-            }
-            strcpy(new_topics, item->valuestring);
-        } else {
-            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid 'topics' value");
-            cJSON_Delete(root); nvs_close(nvs);
-            return ESP_FAIL;
-        }
-    }
 
     esp_err_t err_nvs = ESP_OK;
     err_nvs |= nvs_set_u8(nvs, "mqtt_en", new_enabled);
@@ -500,7 +460,6 @@ static esp_err_t mqtt_post_handler(httpd_req_t *req)
     err_nvs |= nvs_set_u16(nvs, "mqtt_port", new_port);
     err_nvs |= nvs_set_str(nvs, "mqtt_user", new_user);
     err_nvs |= nvs_set_str(nvs, "mqtt_pass", new_pass);
-    err_nvs |= nvs_set_str(nvs, "mqtt_topics", new_topics);
     if (err_nvs != ESP_OK || nvs_commit(nvs) != ESP_OK) {
         nvs_close(nvs);
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save MQTT config");

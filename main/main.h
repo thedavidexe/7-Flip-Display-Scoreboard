@@ -50,6 +50,7 @@
 #define CLEAR_KEY(state, key)  ((state) &= ~(key))    		/* Set bit to 0 */
 #define CHECK_KEY(state, key)  (((state) & (key)) != 0)		/* Is bit set?	*/
 
+
 #define FIRM "FIRMWARE"
 
 enum  pp_alert_t{
