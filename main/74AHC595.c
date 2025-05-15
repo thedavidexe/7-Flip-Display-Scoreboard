@@ -32,7 +32,6 @@
 #include "74AHC595.h"
 #include "driver/gpio.h"
 
-
 // Initialization
 extern status_t status;
 static int last_data_bit = -1;
@@ -222,6 +221,35 @@ void shift_register_send_chain(uint16_t *data, uint8_t count)
     gpio_set_level(SHIFT_REG_LATCH_PIN, 0);
 }
 
+// The function accepts an 8-bit variable 'segs', where:
+// bit0 -> segment A, bit1 -> segment B, bit2 -> segment C,
+// bit3 -> segment D, bit4 -> segment E, bit5 -> segment F,
+// bit6 -> segment G; bit7 is unused.
+// The returned value is a 16-bit number, where for each segment:
+// 0b01 means the segment is ON, and 0b10 means the segment is OFF,
+// packed in the following order: E, D, C, F, G, A, B.
+static uint16_t get_symbol_pattern(uint8_t segs) 
+{
+    uint16_t pattern = 0;
+    // Order of segments for packing:
+    // "E", "D", "C", "F", "G", "A", "B"
+    // corresponding to the input bits: 4, 3, 2, 5, 6, 0, 1.
+    int bitMapping[7] = { 4, 3, 2, 5, 6, 0, 1 };
+
+    for (int i = 0; i < 7; i++) 
+    {
+        // If the input bit corresponding to the segment (according to the mapping) is set,
+        // assign the code 0b01 (segment on), otherwise 0b10 (segment off)
+        uint16_t bitValue = (segs & (1 << bitMapping[i])) ? 0x01 : 0x02;
+        // Calculate the shift - each segment uses 2 bits,
+        // and the most significant pair starts at bits 13-12 (decreasing by 2 bits for each subsequent pair)
+        int shift = (6 - i) * 2;
+        pattern |= (bitValue << shift);
+    }
+
+    return pattern;
+}
+
 /**
  * @brief Converts a single digit (0–9 or 10 for clear) into its corresponding 16-bit pattern.
  *
@@ -237,22 +265,24 @@ uint16_t get_digit_pattern(uint8_t digit)
     uint16_t pattern = 0;
     switch (digit)
     {
-        case 0:  pattern = 0x1565; break;
-        case 1:  pattern = 0x29A9; break;
-        case 2:  pattern = 0x1695; break;
-        case 3:  pattern = 0x2595; break;
-        case 4:  pattern = 0x2959; break;
-        case 5:  pattern = 0x2556; break;
-        case 6:  pattern = 0x1556; break;
-        case 7:  pattern = 0x29A5; break;
-        case 8:  pattern = 0x1555; break;
-        case 9:  pattern = 0x2555; break;
+	    case 0:  pattern = 0x3F;  break;  // 0b00111111: A B C D E F
+	    case 1:  pattern = 0x06;  break;  // 0b00000110:   B C
+	    case 2:  pattern = 0x5B;  break;  // 0b01011011: A B   D E   G
+	    case 3:  pattern = 0x4F;  break;  // 0b01001111: A B C D     G
+	    case 4:  pattern = 0x66;  break;  // 0b01100110:   B C     F G
+	    case 5:  pattern = 0x6D;  break;  // 0b01101101: A   C D   F G
+	    case 6:  pattern = 0x7D;  break;  // 0b01111101: A   C D E F G
+	    case 7:  pattern = 0x07;  break;  // 0b00000111: A B C
+	    case 8:  pattern = 0x7F;  break;  // 0b01111111: A B C D E F G
+	    case 9:  pattern = 0x6F;  break;  // 0b01101111: A B C D   F G
         // For an invalid digit (or digit 10), return the clear pattern.
         case 10:
-        default: pattern = 0x2AAA; break;
+        default: pattern = 0x00; break;
     }
     return pattern;
 }
+
+
 
 /**
  * @brief Displays a single digit on a 7-segment mechanical display.
@@ -265,18 +295,11 @@ uint16_t get_digit_pattern(uint8_t digit)
  *
  * @param digit The digit to display (0–9) or 10 to clear the display.
  */
-void DisplayDigit(uint8_t digit)
+void DisplayDigit(uint8_t digit, uint8_t target)
 {
     uint16_t pattern = get_digit_pattern(digit);
     
-    // Send the pattern to update the display.
-    shift_register_send_word(pattern);
-    
-    // Wait 100 ms for the mechanical movement (segment change).
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    
-    // Send zeros on all 16 outputs to disable the motors.
-    shift_register_send_word(0x0000);
+    DisplaySymbol(pattern, target);
 }
 
 /**
@@ -292,12 +315,10 @@ void DisplayDigit(uint8_t digit)
  *
  * @param number The decimal number to be displayed.
  */
-void DisplayNumber(uint32_t number)
+void DisplayNumber(uint32_t number, uint8_t group)
 {
     uint8_t digits[10];  // Buffer to hold up to 10 digits (sufficient for a uint32_t).
     uint8_t count = 0;
-    
-    gpio_set_level(POWER_PIN, 1);
     
     // Special case: if number is 0, add a single digit '0'.
     if (number == 0)
@@ -322,42 +343,14 @@ void DisplayNumber(uint32_t number)
               digits[count - 1 - i] = temp;
          }
     }
-    
+      
     // Sequentially update each display starting from the most significant digit.
     // For a number with 'count' digits, the update for the digit at index 'i'
     // is performed by shifting a chain with length = (count - i).
-    for (uint8_t i = 0; i < count; i++)
-    {
-        uint8_t chain_length = count - i;
-        uint16_t chain[10]; // Maximum chain length is 10 words.
-        
-        // Prepare the chain: the first word is the new digit's pattern,
-        // the remaining words are set to 0 (no update) so that only the target display is affected.
-        chain[0] = get_digit_pattern(digits[i]);
-        
-        for (uint8_t j = 1; j < chain_length; j++)
-        {
-            chain[j] = 0x0000;
-        }
-        
-        // Send the chain to update the targeted display.
-        shift_register_send_chain(chain, chain_length);
-        
-        // Wait 100 ms to allow the segment's mechanical state to change.
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-        
-        // Send a chain of zeros to disable the motor drivers (all 16 outputs off) for this pair.
-        for (uint8_t j = 0; j < 2; j++)
-        {
-            chain[j] = 0x0000;
-        }
-        shift_register_send_chain(chain, 2);
-        
-        // Wait 100 ms before update new module
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+    for (uint8_t i = status.groups[group].start_position; i <= status.groups[group].end_position; i++)
+    {    
+        DisplayDigit(digits[i - status.groups[group].start_position], i);
     }
-    
-    gpio_set_level(POWER_PIN, 0);
 }
 
 /**
@@ -373,59 +366,41 @@ void DisplayNumber(uint32_t number)
  * @param pattern 16-bit pattern to be displayed.
  * @param target Display number (1 = least significant, etc.).
  */
-void DisplaySymbol(uint16_t pattern, uint8_t target)
+void DisplaySymbol(uint8_t pattern_raw, uint8_t target)
 {
     // Retrieve the number of displays detected (set by detect_display_count).
     uint8_t total = status.display_number;
+    uint16_t pattern = get_symbol_pattern(pattern_raw);
+    uint16_t chain[status.display_number]; 
 
     // Check if the given display number is valid.
-    if (target < 1 || target > total)
-    {
-        // In case of an invalid display number, you may optionally clear all displays.
+    if (target > (total - 1))
         return;
-    }
 
+    // If the current iteration corresponds to the target display,
+    // set the pattern; otherwise, set 0 (turn off).
+    for (uint8_t i = 0; i < total; i++) {
+        chain[i] = (i == target) ? pattern : 0x0000;
+    }
+    
     // Enable power to the displays.
     gpio_set_level(POWER_PIN, 1);
 
-    // Update each display sequentially, starting from the most significant.
-    // In a chain of 'total' displays, the target display corresponds to the iteration i = (total - target)
-    // (e.g., for target = 1, i = total - 1, which is the least significant).
-    for (uint8_t i = 0; i < total; i++)
-    {
-        uint8_t chain_length = total - i;
-        uint16_t chain[10]; // Maximum chain length is 10 words, as used in DisplayNumber.
+    // Send the prepared chain to the shift registers.
+    shift_register_send_chain(chain, total);
 
-        // If the current iteration corresponds to the target display,
-        // set the pattern; otherwise, set 0 (turn off).
-        if (i == (total - target))
-        {
-            chain[0] = pattern;
-        }
-        else
-        {
-            chain[0] = 0x0000;
-        }
+    // Wait 100 ms to allow for the mechanical movement of the segments.
+    vTaskDelay(100 / portTICK_PERIOD_MS);
 
-        // Set the rest of the chain elements to 0.
-        for (uint8_t j = 1; j < chain_length; j++)
-        {
-            chain[j] = 0x0000;
-        }
-
-        // Send the prepared chain to the shift registers.
-        shift_register_send_chain(chain, chain_length);
-
-        // Wait 100 ms to allow for the mechanical movement of the segments.
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-
-        // Turn off motor drivers for the updated module by sending a chain of two zero words.
-        uint16_t chain_off[2] = {0x0000, 0x0000};
-        shift_register_send_chain(chain_off, 2);
-
-        // Short delay before updating the next display.
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+    
+    for (uint8_t i = 0; i < total; i++) {
+        chain[i] = 0x0000;
     }
+    // Turn off coil  drivers for the updated module by sending zeros.
+    shift_register_send_chain(chain, total);
+
+    // Short delay before updating the next display.
+    vTaskDelay(1 / portTICK_PERIOD_MS);
 
     // Disable power to the displays.
     gpio_set_level(POWER_PIN, 0);
@@ -448,14 +423,8 @@ uint8_t detect_display_count(void)
     uint8_t display_count = 0, flag = 0;
     
     // Clear the shift registers.
-//    gpio_set_level(POWER_PIN, 0);
-//    vTaskDelay(10 / portTICK_PERIOD_MS);
-    
-    for (int i = 0; i < 160; i++)
+    for (int i = 0; i < (16 * MAX_DISPLAYS); i++)
 		shift_one_bit(0);
-		
-//	gpio_set_level(POWER_PIN, 1);
-//	vTaskDelay(10 / portTICK_PERIOD_MS);
     
     while (1)
     {
@@ -466,7 +435,6 @@ uint8_t detect_display_count(void)
             if (flag == 0)
             {
 				flag = 1;
-				
                 shift_one_bit(1);      
             }
             else
@@ -494,9 +462,6 @@ uint8_t detect_display_count(void)
     
     for(int i = 0; i < 16; i++)
     	shift_one_bit(0);
-    
-    // Turn off the 9V power
-    gpio_set_level(POWER_PIN, 0);
     
     // Set global variable
     status.display_number = display_count;

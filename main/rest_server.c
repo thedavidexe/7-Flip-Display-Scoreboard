@@ -21,8 +21,62 @@
 #include "mqtt_com.h"
 #include "ota.h"
 
+const char *CONFIG_TAG = "CONFIG";
+
 extern status_t status;  // Global device status
 extern volatile int ota_progress;
+
+// Helper function to parse a separator string to an enum value
+enum pp_separator_t parse_separator(const char *sep_str)
+{
+    if (!sep_str) return SEP_NULL;
+    if (strcasecmp(sep_str, "colon") == 0) return SEP_COLON;
+    else if (strcasecmp(sep_str, "space") == 0) return SEP_SPACE;
+    else if (strcasecmp(sep_str, "blank") == 0) return SEP_BLANK;
+    else if (strcasecmp(sep_str, "dot") == 0) return SEP_DOT;
+    else if (strcasecmp(sep_str, "dash") == 0) return SEP_DASH;
+    return SEP_NULL;
+}
+
+// Helper function to convert a separator enum value to a string
+const char *separator_to_string(enum pp_separator_t sep)
+{
+    switch(sep){
+        case SEP_COLON: return "colon";
+        case SEP_SPACE: return "space";
+        case SEP_BLANK: return "blank";
+        case SEP_DOT: return "dot";
+        case SEP_DASH: return "dash";
+        default: return NULL; // For SEP_NULL, return NULL so that JSON gets a null value
+    }
+}
+
+// Helper function to parse a mode string to an enum value
+enum pp_mode_t parse_mode(const char *mode_str)
+{
+    if (!mode_str) return MODE_NONE;
+    if (strcasecmp(mode_str, "none") == 0) return MODE_NONE;
+    else if (strcasecmp(mode_str, "mqtt") == 0) return MODE_MQTT;
+    else if (strcasecmp(mode_str, "timer") == 0) return MODE_TIMER;
+    else if (strcasecmp(mode_str, "clock") == 0) return MODE_CLOCK;
+    else if (strcasecmp(mode_str, "mannual") == 0) return MODE_MANNUAL;
+    else if (strcasecmp(mode_str, "custom-api") == 0) return MODE_CUSTOM_API;
+    return MODE_NONE;
+}
+
+// Helper function to convert a mode enum value to a string
+const char *mode_to_string(enum pp_mode_t mode)
+{
+    switch(mode){
+        case MODE_NONE: return "none";
+        case MODE_MQTT: return "mqtt";
+        case MODE_TIMER: return "timer";
+        case MODE_CLOCK: return "clock";
+        case MODE_MANNUAL: return "mannual";
+        case MODE_CUSTOM_API: return "custom-api";
+        default: return "none";
+    }
+}
 
 static const char *REST_TAG = "REST";
 #define REST_CHECK(a, str, goto_tag, ...)                                         \
@@ -102,6 +156,257 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
     close(fd);
     ESP_LOGI(REST_TAG, "File sending complete");
     httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
+// Handler for POST /api/v1/config
+// Accepts a JSON object with the structure:
+// {
+//   "general": { "groups": number, "led": true/false },
+//   "groups": {
+//       "group0": { "start_position": x, "end_position": y, "pattern": { "disp0": val, ... }, "separator": "colon" or null, "mode": "mqtt"/"none"/... [, additional options] },
+//       "group1": { ... },
+//       ...
+//    }
+// }
+static esp_err_t config_post_handler(httpd_req_t *req)
+{
+    rest_server_context_t *rest_context = (rest_server_context_t *)req->user_ctx;
+    int total_len = req->content_len;
+    int cur_len = 0, received = 0;
+    char *buf = rest_context->scratch;
+
+    if (total_len >= SCRATCH_BUFSIZE) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Content too long");
+        return ESP_FAIL;
+    }
+
+    // Receive the request data in chunks
+    while (cur_len < total_len) {
+        received = httpd_req_recv(req, buf + cur_len, total_len - cur_len);
+        if (received <= 0) {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive data");
+            return ESP_FAIL;
+        }
+        cur_len += received;
+    }
+    buf[cur_len] = '\0';
+
+    // Parse the JSON object
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        ESP_LOGE(CONFIG_TAG, "Invalid JSON");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    // Parse "general" section
+    cJSON *general = cJSON_GetObjectItem(root, "general");
+    if (general && cJSON_IsObject(general)) {
+        cJSON *groups_item = cJSON_GetObjectItem(general, "groups");
+        if (groups_item && cJSON_IsNumber(groups_item)) {
+            status.total_groups = groups_item->valueint;
+        }
+        cJSON *led_item = cJSON_GetObjectItem(general, "led");
+        if (led_item && (cJSON_IsBool(led_item) || cJSON_IsNumber(led_item))) {
+            status.led = (cJSON_IsTrue(led_item) || (led_item->valueint != 0)) ? 1 : 0;
+        }
+    } else {
+        ESP_LOGW(CONFIG_TAG, "Missing 'general' section");
+    }
+
+    // Parse "groups" section
+    cJSON *groups = cJSON_GetObjectItem(root, "groups");
+    if (groups && cJSON_IsObject(groups)) {
+        cJSON *group = NULL;
+        cJSON_ArrayForEach(group, groups) {
+            if (!group->string) continue;
+            int group_index = -1;
+            if (sscanf(group->string, "group%d", &group_index) != 1) {
+                ESP_LOGW(CONFIG_TAG, "Invalid group name: %s", group->string);
+                continue;
+            }
+            if (group_index < 0 || group_index >= MAX_GROUPS) continue;
+
+            // Parse start_position and end_position
+            cJSON *start_item = cJSON_GetObjectItem(group, "start_position");
+            cJSON *end_item = cJSON_GetObjectItem(group, "end_position");
+            if (start_item && cJSON_IsNumber(start_item))
+                status.groups[group_index].start_position = start_item->valueint;
+            if (end_item && cJSON_IsNumber(end_item))
+                status.groups[group_index].end_position = end_item->valueint;
+
+            // Parse the "pattern" object
+            cJSON *pattern_obj = cJSON_GetObjectItem(group, "pattern");
+            if (pattern_obj && cJSON_IsObject(pattern_obj)) {
+                // Reset the pattern array
+                for (int i = 0; i < MAX_DISPLAYS; i++) {
+                    status.groups[group_index].pattern[i] = 0;
+                }
+                cJSON *disp = NULL;
+                cJSON_ArrayForEach(disp, pattern_obj) {
+                    if (!disp->string) continue;
+                    int disp_index = -1;
+                    if (sscanf(disp->string, "disp%d", &disp_index) != 1) continue;
+                    if (disp_index >= 0 && disp_index < MAX_DISPLAYS && cJSON_IsNumber(disp)) {
+                        status.groups[group_index].pattern[disp_index] = disp->valueint;
+                    }
+                }
+            }
+
+            // Parse the separator field using parse_separator helper
+            cJSON *sep_item = cJSON_GetObjectItem(group, "separator");
+            if (sep_item) {
+                if (cJSON_IsString(sep_item)) {
+                    status.groups[group_index].separator = parse_separator(sep_item->valuestring);
+                } else {
+                    // If separator is null or not a string, set to SEP_NULL
+                    status.groups[group_index].separator = SEP_NULL;
+                }
+            } else {
+                status.groups[group_index].separator = SEP_NULL;
+            }
+
+            // Parse the "mode" field using parse_mode helper
+            cJSON *mode_item = cJSON_GetObjectItem(group, "mode");
+            if (mode_item && cJSON_IsString(mode_item)) {
+                status.groups[group_index].mode = parse_mode(mode_item->valuestring);
+            } else {
+                status.groups[group_index].mode = MODE_NONE;
+            }
+
+            // Parse additional options based on mode (e.g., MQTT topic)
+            if (status.groups[group_index].mode == MODE_MQTT) {
+                cJSON *topic_item = cJSON_GetObjectItem(group, "topic");
+                if (topic_item && cJSON_IsString(topic_item)) {
+                    strncpy(status.groups[group_index].mqtt.topic, topic_item->valuestring, sizeof(status.groups[group_index].mqtt.topic) - 1);
+                }
+            }
+            // Extend parsing for timer, api, or clock settings if provided in JSON
+        }
+    } else {
+        ESP_LOGW(CONFIG_TAG, "Missing 'groups' section");
+    }
+    
+    for(uint8_t i = 0; i < status.total_groups; i++)
+    {
+		uint8_t displays_number = status.groups[i].end_position - status.groups[i].start_position + 1;
+		
+		ESP_LOGI(CONFIG_TAG, "group: %d", i);
+		ESP_LOGI(CONFIG_TAG, "start position: %d", status.groups[i].start_position);
+    	ESP_LOGI(CONFIG_TAG, "end position: %d", status.groups[i].end_position);
+	    ESP_LOGI(CONFIG_TAG, "separator: %d", status.groups[i].separator);
+	    	  
+	    if(status.groups[i].mode == MODE_MQTT){
+			ESP_LOGI(CONFIG_TAG, "mode: MQTT");
+			ESP_LOGI(CONFIG_TAG, "topic: %s", status.groups[i].mqtt.topic);	
+		}
+		else if(status.groups[i].mode == MODE_TIMER){
+			ESP_LOGI(CONFIG_TAG, "mode: TIMER");
+		}
+		else if(status.groups[i].mode == MODE_CLOCK){
+			ESP_LOGI(CONFIG_TAG, "mode: CLOCK");
+		}
+		else if(status.groups[i].mode == MODE_MANNUAL){
+			ESP_LOGI(CONFIG_TAG, "mode: MANNUAL");
+			
+			for(uint8_t l = status.groups[i].start_position; l <= status.groups[i].end_position; l++)
+				DisplaySymbol(status.groups[i].pattern[l - status.groups[i].start_position], l);
+		}
+		else if(status.groups[i].mode == MODE_CUSTOM_API){
+			ESP_LOGI(CONFIG_TAG, "mode: CUSTOM_API");
+		}
+		else{
+			ESP_LOGI(CONFIG_TAG, "mode: NONE");
+			
+			for(uint8_t k = status.groups[i].start_position; k <= status.groups[i].end_position; k++)
+				DisplayDigit(10, k);
+		}
+	    
+	    
+	    for(uint8_t j = 0; j < displays_number; j++)
+			ESP_LOGI(CONFIG_TAG, "disp_%d: %d", j, status.groups[i].pattern[j]);
+			
+	}
+    
+//    DisplaySymbol(status.groups[0].pattern[0], 0);
+//    DisplaySymbol(status.groups[0].pattern[1], 1);
+//    DisplaySymbol(status.groups[0].pattern[2], 2);
+//    DisplaySymbol(status.groups[0].pattern[3], 3);
+//    DisplaySymbol(status.groups[0].pattern[4], 4);
+
+    cJSON_Delete(root);
+    httpd_resp_sendstr(req, "Config updated successfully");
+    return ESP_OK;
+}
+
+// Handler for GET /api/v1/config
+// Returns a JSON object based on the current configuration stored in the global 'status' structure
+static esp_err_t config_get_handler(httpd_req_t *req)
+{
+    cJSON *root = cJSON_CreateObject();
+    if (!root) return ESP_FAIL;
+
+    // Create "general" section
+    cJSON *general = cJSON_CreateObject();
+    cJSON_AddNumberToObject(general, "groups", status.total_groups);
+    cJSON_AddBoolToObject(general, "led", status.led ? true : false);
+    cJSON_AddItemToObject(root, "general", general);
+
+    // Create "groups" section
+    cJSON *groups = cJSON_CreateObject();
+    for (int i = 0; i < status.total_groups && i < MAX_GROUPS; i++) {
+        cJSON *group_obj = cJSON_CreateObject();
+        // Add start_position and end_position
+        cJSON_AddNumberToObject(group_obj, "start_position", status.groups[i].start_position);
+        cJSON_AddNumberToObject(group_obj, "end_position", status.groups[i].end_position);
+
+        // Build the "pattern" object by iterating from 0 to (end_position - start_position + 1)
+        cJSON *pattern_obj = cJSON_CreateObject();
+        int num_disp = status.groups[i].end_position - status.groups[i].start_position + 1;
+        if (num_disp < 0) num_disp = 0;
+        for (int j = 0; j < num_disp && j < MAX_DISPLAYS; j++) {
+            char key[16];
+            snprintf(key, sizeof(key), "disp%d", j);
+            cJSON_AddNumberToObject(pattern_obj, key, status.groups[i].pattern[j]);
+        }
+        cJSON_AddItemToObject(group_obj, "pattern", pattern_obj);
+
+        // Add the separator field: if not SEP_NULL, add its string value, otherwise add null
+        const char *sep_str = separator_to_string(status.groups[i].separator);
+        if (sep_str) {
+            cJSON_AddStringToObject(group_obj, "separator", sep_str);
+        } else {
+            cJSON_AddNullToObject(group_obj, "separator");
+        }
+
+        // Add the mode field
+        cJSON_AddStringToObject(group_obj, "mode", mode_to_string(status.groups[i].mode));
+
+        // Add optional settings for specific modes (e.g., MQTT topic)
+        if (status.groups[i].mode == MODE_MQTT) {
+            if (strlen(status.groups[i].mqtt.topic) > 0) {
+                cJSON_AddStringToObject(group_obj, "topic", status.groups[i].mqtt.topic);
+            }
+        }
+        // Similarly, add timer, api, or clock settings if present
+
+        char group_key[16];
+        snprintf(group_key, sizeof(group_key), "group%d", i);
+        cJSON_AddItemToObject(groups, group_key, group_obj);
+    }
+    cJSON_AddItemToObject(root, "groups", groups);
+
+    char *resp_str = cJSON_PrintUnformatted(root);
+    if (!resp_str) {
+        cJSON_Delete(root);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "JSON generation failed");
+        return ESP_FAIL;
+    }
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, resp_str);
+    free(resp_str);
+    cJSON_Delete(root);
     return ESP_OK;
 }
 
@@ -618,6 +923,22 @@ esp_err_t start_rest_server(const char *base_path)
     ESP_LOGI(REST_TAG, "Starting HTTP Server");
     REST_CHECK(httpd_start(&server, &config) == ESP_OK, "Start server failed", err_start);
     
+    httpd_uri_t config_get_uri = {
+	    .uri      = "/api/v1/config",
+	    .method   = HTTP_GET,
+	    .handler  = config_get_handler,
+	    .user_ctx = rest_context
+	};
+	httpd_register_uri_handler(server, &config_get_uri);
+	
+	httpd_uri_t config_post_uri = {
+	    .uri      = "/api/v1/config",
+	    .method   = HTTP_POST,
+	    .handler  = config_post_handler,
+	    .user_ctx = rest_context
+	};
+	httpd_register_uri_handler(server, &config_post_uri);
+	    
     httpd_uri_t versions_get_uri = {
         .uri      = "/api/v1/versions",
         .method   = HTTP_GET,

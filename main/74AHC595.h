@@ -54,13 +54,12 @@
 void DetectDisplays(void);
 esp_err_t shift_register_init(void);
 void shift_register_send_word(uint16_t data);
-void DisplayNumber(uint32_t number);
-void DisplayDigit(uint8_t digit);
+void DisplayNumber(uint32_t number, uint8_t group);
 esp_err_t gpio_init(gpio_int_type_t type, gpio_mode_t mode, gpio_pulldown_t pull_down, gpio_pullup_t pull_up, int no, uint8_t initial_state);
-void DisplaySymbol(uint16_t pattern, uint8_t target);
+void DisplaySymbol(uint8_t pattern_raw, uint8_t target);
 uint8_t detect_display_count(void);
 void Send2Register(uint16_t data);
-void DisplayDigit(uint8_t digit);
+void DisplayDigit(uint8_t digit, uint8_t target);
 
 
 #endif /* MAIN_74AHC595_H_ */

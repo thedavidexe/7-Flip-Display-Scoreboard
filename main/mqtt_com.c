@@ -28,6 +28,7 @@
  * For more information, visit: https://smartsolutions4home.com/7-flip-display
  */
 
+#include "main.h"
 #include "mqtt_com.h"
 #include "mqtt_client.h"    // Use your mqtt_client.h as available in your ESP-IDF version
 #include "esp_log.h"
@@ -38,15 +39,16 @@
 #include <stdio.h> // for snprintf
 #include "74AHC595.h"
 
+extern status_t status;
 static const char *MQTT_TAG = "MQTT";
 
-/* Hardcoded MQTT topics */
-static const char *hardcoded_topics[] = {
-    "mqtt-get-data",
-    "number"
-    // Add more topics as needed
-};
-static const int num_hardcoded_topics = sizeof(hardcoded_topics) / sizeof(hardcoded_topics[0]);
+///* Hardcoded MQTT topics */
+//static const char *hardcoded_topics[] = {
+//    "mqtt-get-data",
+//    "number"
+//    // Add more topics as needed
+//};
+//static const int num_hardcoded_topics = sizeof(hardcoded_topics) / sizeof(hardcoded_topics[0]);
 
 /** MQTT client handle */
 static esp_mqtt_client_handle_t client = NULL;
@@ -133,11 +135,13 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(MQTT_TAG, "Connected to MQTT broker");
             mqtt_connected = true;
-            // Subscribe to all topics from Hardcoded MQTT topics
-			for (int i = 0; i < num_hardcoded_topics; i++) {
-			    esp_mqtt_client_subscribe(client, hardcoded_topics[i], 1);
-			    ESP_LOGI(MQTT_TAG, "Subscribed to hardcoded topic: %s", hardcoded_topics[i]);
-			}
+//            // Subscribe to all topics from Hardcoded MQTT topics
+//			for (int i = 0; i < num_hardcoded_topics; i++) {
+//			    esp_mqtt_client_subscribe(client, hardcoded_topics[i], 1);
+//			    ESP_LOGI(MQTT_TAG, "Subscribed to hardcoded topic: %s", hardcoded_topics[i]);
+//			}
+			    esp_mqtt_client_subscribe(client, "#", 1);
+    			ESP_LOGI(MQTT_TAG, "Subscribed to all topics (#)");
             break;
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGW(MQTT_TAG, "Disconnected from MQTT broker");
@@ -154,20 +158,16 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             data_buf[dlen] = '\0';
             ESP_LOGI(MQTT_TAG, "Received MQTT data on topic '%s': %s", topic_buf, data_buf);
             
-            
-            if(strcmp(topic_buf, "mqtt-get-data") == 0) 
-            {
-			    DisplayNumber((uint32_t)strtoul(data_buf, NULL, 10));
-			} 
-			else if(strcmp(topic_buf, "number") == 0) 
+            /* Check if any of the groups has MQTT mode selected */
+			for(uint8_t i = 0; i < status.display_number; i++)
 			{
-			    DisplayNumber((uint32_t)strtoul(data_buf, NULL, 10));
-			} 
-			else 
-			{
-				//Display "Err"
-				DisplaySymbol(0x1656, 2);
-				DisplaySymbol(0x1A9A, 1);
+				if(status.groups[i].mode == MODE_MQTT)
+				{
+					if(strcmp(topic_buf, status.groups[i].mqtt.topic) == 0) 
+		            {
+					    DisplayNumber((uint32_t)strtoul(data_buf, NULL, 10), i);
+					}
+				}
 			}
             
             break;

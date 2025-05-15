@@ -8,8 +8,3 @@ idf_component_register(SRCS "main.c"
                     INCLUDE_DIRS "."
                     EMBED_TXTFILES ${project_dir}/server_certs/ca_cert.pem)
                    
-set(WEB_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../front")
-if(NOT EXISTS "${WEB_SRC_DIR}/dist")
-    message(FATAL_ERROR "${WEB_SRC_DIR}/dist doesn't exist. Please run 'npm run build' in ${WEB_SRC_DIR}")
-endif()
-spiffs_create_partition_image(www_0 "${WEB_SRC_DIR}/dist" FLASH_IN_PROJECT)

@@ -23,7 +23,7 @@
 #include "esp_spiffs.h"
 #include <string.h>
 
-//#define PROGRAMMED_FROM_IDE
+#define PROGRAMMED_FROM_IDE
 
 static void init_version_info() {
     nvs_handle_t nvs;
