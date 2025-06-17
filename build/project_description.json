@@ -1,7 +1,7 @@
 {
     "version":            "1.1",
     "project_name":       "main",
-    "project_version":    "49354ee-dirty",
+    "project_version":    "c829ab6-dirty",
     "project_path":       "C:/Users/Sebastian/ESP32_Workspace/7_flip_display",
     "idf_path":           "C:/Espressif/frameworks/esp-idf-v5.4",
     "build_dir":          "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/build",
@@ -1210,7 +1210,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [ "espressif__mdns" ],
             "file": "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/build/esp-idf/main/libmain.a",
-            "sources": [ "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/main.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/rest_server.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/rtc.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/74AHC595.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/esp_rest_main.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/mqtt_com.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/ota.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/build/ca_cert.pem.S" ],
+            "sources": [ "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/main.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/rest_server.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/rtc.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/74AHC595.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/esp_rest_main.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/mqtt_com.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/ota.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/led.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/main/config.c", "C:/Users/Sebastian/ESP32_Workspace/7_flip_display/build/ca_cert.pem.S" ],
             "include_dirs": [ "." ]
         },
         "mbedtls": {

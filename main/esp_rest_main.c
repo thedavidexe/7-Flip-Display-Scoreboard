@@ -22,8 +22,10 @@
 #include "esp_system.h"
 #include "esp_spiffs.h"
 #include <string.h>
+#include "led.h"
 
-#define PROGRAMMED_FROM_IDE
+//#define PROGRAMMED_FROM_IDE
+#define REST_TAG "REST"
 
 static void init_version_info() {
     nvs_handle_t nvs;
@@ -171,6 +173,7 @@ void SetDefaultPartition(void)
 void RestfulServerTask(void *arg)
 {
     ESP_LOGI(SERVER, "Initializing the server...");
+    
     // Initialize NVS, network interfaces, and default event loop
     ESP_ERROR_CHECK(nvs_flash_init());
 
@@ -307,6 +310,8 @@ void RestfulServerTask(void *arg)
 	}
 
     ESP_LOGI(SERVER, "Server started");
+    
+    LED_set_color(RED, 1);
 
     vTaskDelete(NULL);
 }

@@ -23,8 +23,11 @@
 
 const char *CONFIG_TAG = "CONFIG";
 
+extern SemaphoreHandle_t xNewDataSemaphore;
+
 extern status_t status;  // Global device status
 extern volatile int ota_progress;
+
 
 // Helper function to parse a separator string to an enum value
 enum pp_separator_t parse_separator(const char *sep_str)
@@ -59,7 +62,7 @@ enum pp_mode_t parse_mode(const char *mode_str)
     else if (strcasecmp(mode_str, "mqtt") == 0) return MODE_MQTT;
     else if (strcasecmp(mode_str, "timer") == 0) return MODE_TIMER;
     else if (strcasecmp(mode_str, "clock") == 0) return MODE_CLOCK;
-    else if (strcasecmp(mode_str, "mannual") == 0) return MODE_MANNUAL;
+    else if (strcasecmp(mode_str, "manual") == 0) return MODE_MANUAL;
     else if (strcasecmp(mode_str, "custom-api") == 0) return MODE_CUSTOM_API;
     return MODE_NONE;
 }
@@ -72,7 +75,7 @@ const char *mode_to_string(enum pp_mode_t mode)
         case MODE_MQTT: return "mqtt";
         case MODE_TIMER: return "timer";
         case MODE_CLOCK: return "clock";
-        case MODE_MANNUAL: return "mannual";
+        case MODE_MANUAL: return "manual";
         case MODE_CUSTOM_API: return "custom-api";
         default: return "none";
     }
@@ -175,6 +178,8 @@ static esp_err_t config_post_handler(httpd_req_t *req)
     int total_len = req->content_len;
     int cur_len = 0, received = 0;
     char *buf = rest_context->scratch;
+    
+    LED_set_color(BLUE, 1);
 
     if (total_len >= SCRATCH_BUFSIZE) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Content too long");
@@ -207,10 +212,15 @@ static esp_err_t config_post_handler(httpd_req_t *req)
         if (groups_item && cJSON_IsNumber(groups_item)) {
             status.total_groups = groups_item->valueint;
         }
-        cJSON *led_item = cJSON_GetObjectItem(general, "led");
-        if (led_item && (cJSON_IsBool(led_item) || cJSON_IsNumber(led_item))) {
-            status.led = (cJSON_IsTrue(led_item) || (led_item->valueint != 0)) ? 1 : 0;
-        }
+//        cJSON *led_item = cJSON_GetObjectItem(general, "led");
+//        if (led_item && (cJSON_IsBool(led_item) || cJSON_IsNumber(led_item))) {
+//            status.led = (cJSON_IsTrue(led_item) || (led_item->valueint != 0)) ? 1 : 0;
+//        }
+        cJSON *time_zone_item = cJSON_GetObjectItem(general, "time_zone");
+		if (time_zone_item && cJSON_IsString(time_zone_item) && time_zone_item->valuestring) {
+		    strncpy(status.timezone, time_zone_item->valuestring, sizeof(status.timezone) - 1);
+		    status.timezone[sizeof(status.timezone)-1] = '\0';
+		}
     } else {
         ESP_LOGW(CONFIG_TAG, "Missing 'general' section");
     }
@@ -275,67 +285,206 @@ static esp_err_t config_post_handler(httpd_req_t *req)
                 status.groups[group_index].mode = MODE_NONE;
             }
 
-            // Parse additional options based on mode (e.g., MQTT topic)
+            // Parse additional options based on mode
+            //MQTT
             if (status.groups[group_index].mode == MODE_MQTT) {
                 cJSON *topic_item = cJSON_GetObjectItem(group, "topic");
                 if (topic_item && cJSON_IsString(topic_item)) {
                     strncpy(status.groups[group_index].mqtt.topic, topic_item->valuestring, sizeof(status.groups[group_index].mqtt.topic) - 1);
                 }
             }
-            // Extend parsing for timer, api, or clock settings if provided in JSON
+            //Timer
+            if (status.groups[group_index].mode == MODE_TIMER) {
+			    cJSON *type_item = cJSON_GetObjectItem(group, "type");
+			    if (type_item && cJSON_IsString(type_item)) {
+			        const char *type = type_item->valuestring;
+			        if (strcmp(type, "advanced") == 0) {
+			            status.groups[group_index].timer.type = TIMER_ADVANCED;
+			
+			            // cycles (string → int)
+			            cJSON *cycles_item = cJSON_GetObjectItem(group, "cycles");
+			            if (cycles_item && cJSON_IsNumber(cycles_item)) {
+			                status.groups[group_index].timer.cycles = cycles_item->valueint;
+			            }
+			
+			            // showCurrentCycle (bool)
+			            cJSON *show_item = cJSON_GetObjectItem(group, "showCurrentCycle");
+			            if (show_item && cJSON_IsBool(show_item)) {
+			                status.groups[group_index].timer.show_curr_cycle = cJSON_IsTrue(show_item);
+			            }
+			
+			            // work (number)
+			            cJSON *work_item = cJSON_GetObjectItem(group, "work");
+			            if (work_item && cJSON_IsNumber(work_item)) {
+			                status.groups[group_index].timer.work_time = work_item->valueint;
+			            }
+			
+			            // rest (number)
+			            cJSON *rest_item = cJSON_GetObjectItem(group, "rest");
+			            if (rest_item && cJSON_IsNumber(rest_item)) {
+			                status.groups[group_index].timer.rest_time = rest_item->valueint;
+			            }
+			
+			        } else if (strcmp(type, "simple") == 0) {
+			            status.groups[group_index].timer.type = TIMER_SIMPLE;
+			
+			            // from (number)
+			            cJSON *from_item = cJSON_GetObjectItem(group, "from");
+			            if (from_item && cJSON_IsNumber(from_item)) {
+			                status.groups[group_index].timer.count_from = from_item->valueint;
+			            }
+			
+			            // to (number)
+			            cJSON *to_item = cJSON_GetObjectItem(group, "to");
+			            if (to_item && cJSON_IsNumber(to_item)) {
+			                status.groups[group_index].timer.count_to = to_item->valueint;
+			            }
+			
+			        } else {
+			            // Unknown type
+			            status.groups[group_index].timer.type = TIMER_NONE;
+			        }
+			        
+			        //Common section
+		            // intervalUnit
+					cJSON *iunit_item = cJSON_GetObjectItem(group, "intervalUnit");
+					if (iunit_item && cJSON_IsString(iunit_item) && iunit_item->valuestring) {
+					    const char *unit = iunit_item->valuestring;
+				        if      (unit[0] == 's') status.groups[group_index].timer.interval_unit = INTERVAL_SECONDS;
+				        else if (unit[0] == 'm') status.groups[group_index].timer.interval_unit = INTERVAL_MINUTES;
+				        else if (unit[0] == 'h') status.groups[group_index].timer.interval_unit = INTERVAL_HOURS;
+				        else if (unit[0] == 'd') status.groups[group_index].timer.interval_unit = INTERVAL_DAYS;
+				        else                      status.groups[group_index].timer.interval_unit = INTERVAL_SECONDS; // fallback
+				     }
+				     // alarm (bool)
+		            cJSON *alarm_item = cJSON_GetObjectItem(group, "alarm");
+		            if (alarm_item && cJSON_IsBool(alarm_item)) {
+		                status.groups[group_index].timer.alarm = cJSON_IsTrue(alarm_item);
+		            }
+				     		        
+			    } else {
+			        // Lack of "type"
+			        status.groups[group_index].timer.type = TIMER_NONE;
+			    }
+			}
+			// Clock
+			if (status.groups[group_index].mode == MODE_CLOCK) {
+			    // clock_unit → pp_clock_type_t
+			    cJSON *unit_item = cJSON_GetObjectItem(group, "clock_unit");
+			    if (unit_item && cJSON_IsString(unit_item)) {
+			        const char *u = unit_item->valuestring;
+			        if      (strcmp(u, "seconds") == 0) status.groups[group_index].clock.type = RTC_SECONDS;
+			        else if (strcmp(u, "minutes") == 0) status.groups[group_index].clock.type = RTC_MINUTES;
+			        else if (strcmp(u, "hours")   == 0) status.groups[group_index].clock.type = RTC_HOURS;
+			        else if (strcmp(u, "days")     == 0) status.groups[group_index].clock.type = RTC_DAY;
+			        else if (strcmp(u, "months")   == 0) status.groups[group_index].clock.type = RTC_MONTCH;
+			        else if (strcmp(u, "years")    == 0) status.groups[group_index].clock.type = RTC_YEAR;
+			        else                                status.groups[group_index].clock.type = RTC_NONE;
+			    } else {
+			        status.groups[group_index].clock.type = RTC_NONE;
+			    }
+			
+			    // time_format → pp_time_format_t + bool flag
+			    cJSON *fmt_item = cJSON_GetObjectItem(group, "time_format");
+			    if (fmt_item && cJSON_IsString(fmt_item)) {
+			        if (strcmp(fmt_item->valuestring, "12h") == 0) {
+			            status.groups[group_index].clock.time_format = FORMAT_12H;
+			            //status.groups[group_index].clock.time_tormat = false;
+			        } else {
+			            // domyślnie 24h
+			            status.groups[group_index].clock.time_format = FORMAT_24H;
+			            //status.groups[group_index].clock.time_tormat = true;
+			        }
+			    } else {
+			        // brak pola – użyj 24-godzinnego
+			        status.groups[group_index].clock.time_format = FORMAT_24H;
+			        //status.groups[group_index].clock.time_tormat = true;
+			    }
+			
+			    // offset → time_offset
+			    cJSON *off_item = cJSON_GetObjectItem(group, "offset");
+			    if (off_item && cJSON_IsNumber(off_item)) {
+			        status.groups[group_index].clock.time_offset = off_item->valueint;
+			    } else {
+			        status.groups[group_index].clock.time_offset = 0;
+			    }
+			}
+			// CUSTOM-API
+			if (status.groups[group_index].mode == MODE_CUSTOM_API) {
+			    // endpoint → url
+			    cJSON *endpoint_item = cJSON_GetObjectItem(group, "endpoint");
+			    if (endpoint_item && cJSON_IsString(endpoint_item) && endpoint_item->valuestring) {
+			        strncpy(status.groups[group_index].api.url,
+			                endpoint_item->valuestring,
+			                sizeof(status.groups[group_index].api.url) - 1);
+			        status.groups[group_index].api.url[
+			            sizeof(status.groups[group_index].api.url) - 1] = '\0';
+			    }
+			
+			    // method → pp_rest_method_t
+			    cJSON *method_item = cJSON_GetObjectItem(group, "method");
+			    if (method_item && cJSON_IsString(method_item) && method_item->valuestring) {
+			        if (strcmp(method_item->valuestring, "GET") == 0) {
+			            status.groups[group_index].api.method = GET;
+			        } else {
+			            status.groups[group_index].api.method = POST;
+			        }
+			    }
+			
+			    // headers → serialize JSON object back to string
+			    cJSON *headers_item = cJSON_GetObjectItem(group, "headers");
+			    if (headers_item && cJSON_IsObject(headers_item)) {
+			        char *hdr_str = cJSON_PrintUnformatted(headers_item);
+			        if (hdr_str) {
+			            strncpy(status.groups[group_index].api.headers,
+			                    hdr_str,
+			                    sizeof(status.groups[group_index].api.headers) - 1);
+			            status.groups[group_index].api.headers[
+			                sizeof(status.groups[group_index].api.headers) - 1] = '\0';
+			            cJSON_free(hdr_str);
+			        }
+			    } else {
+			        status.groups[group_index].api.headers[0] = '\0';
+			    }
+			
+			    // responseFormat → pp_response_format_t
+			    cJSON *fmt_item = cJSON_GetObjectItem(group, "responseFormat");
+			    if (fmt_item && cJSON_IsString(fmt_item) && fmt_item->valuestring) {
+			        if      (strcmp(fmt_item->valuestring, "xml")  == 0) status.groups[group_index].api.format = XML;
+			        else if (strcmp(fmt_item->valuestring, "text") == 0) status.groups[group_index].api.format = TEXT;
+			        else                                                  status.groups[group_index].api.format = JSON;
+			    }
+			
+			    // responseKeyPath → key_patch
+			    cJSON *key_item = cJSON_GetObjectItem(group, "responseKeyPath");
+			    if (key_item && cJSON_IsString(key_item) && key_item->valuestring) {
+			        strncpy(status.groups[group_index].api.key_patch,
+			                key_item->valuestring,
+			                sizeof(status.groups[group_index].api.key_patch) - 1);
+			        status.groups[group_index].api.key_patch[
+			            sizeof(status.groups[group_index].api.key_patch) - 1] = '\0';
+			    }
+			
+			    // interval → pulling_interval (number)
+			    cJSON *int_item = cJSON_GetObjectItem(group, "interval");
+			    if (int_item && cJSON_IsNumber(int_item)) {
+			        status.groups[group_index].api.pulling_interval = (uint8_t)int_item->valueint;
+			    }
+			}
+						
+            
         }
     } else {
         ESP_LOGW(CONFIG_TAG, "Missing 'groups' section");
     }
     
-    for(uint8_t i = 0; i < status.total_groups; i++)
-    {
-		uint8_t displays_number = status.groups[i].end_position - status.groups[i].start_position + 1;
-		
-		ESP_LOGI(CONFIG_TAG, "group: %d", i);
-		ESP_LOGI(CONFIG_TAG, "start position: %d", status.groups[i].start_position);
-    	ESP_LOGI(CONFIG_TAG, "end position: %d", status.groups[i].end_position);
-	    ESP_LOGI(CONFIG_TAG, "separator: %d", status.groups[i].separator);
-	    	  
-	    if(status.groups[i].mode == MODE_MQTT){
-			ESP_LOGI(CONFIG_TAG, "mode: MQTT");
-			ESP_LOGI(CONFIG_TAG, "topic: %s", status.groups[i].mqtt.topic);	
-		}
-		else if(status.groups[i].mode == MODE_TIMER){
-			ESP_LOGI(CONFIG_TAG, "mode: TIMER");
-		}
-		else if(status.groups[i].mode == MODE_CLOCK){
-			ESP_LOGI(CONFIG_TAG, "mode: CLOCK");
-		}
-		else if(status.groups[i].mode == MODE_MANNUAL){
-			ESP_LOGI(CONFIG_TAG, "mode: MANNUAL");
-			
-			for(uint8_t l = status.groups[i].start_position; l <= status.groups[i].end_position; l++)
-				DisplaySymbol(status.groups[i].pattern[l - status.groups[i].start_position], l);
-		}
-		else if(status.groups[i].mode == MODE_CUSTOM_API){
-			ESP_LOGI(CONFIG_TAG, "mode: CUSTOM_API");
-		}
-		else{
-			ESP_LOGI(CONFIG_TAG, "mode: NONE");
-			
-			for(uint8_t k = status.groups[i].start_position; k <= status.groups[i].end_position; k++)
-				DisplayDigit(10, k);
-		}
-	    
-	    
-	    for(uint8_t j = 0; j < displays_number; j++)
-			ESP_LOGI(CONFIG_TAG, "disp_%d: %d", j, status.groups[i].pattern[j]);
-			
-	}
-    
-//    DisplaySymbol(status.groups[0].pattern[0], 0);
-//    DisplaySymbol(status.groups[0].pattern[1], 1);
-//    DisplaySymbol(status.groups[0].pattern[2], 2);
-//    DisplaySymbol(status.groups[0].pattern[3], 3);
-//    DisplaySymbol(status.groups[0].pattern[4], 4);
-
+    // If the object is received from the web application, pass it for handling
+    xSemaphoreGive(xNewDataSemaphore);
+      
+    /* Always close the socket This prevents delays caused by the application trying to connect through an already closed socket.
+    Now the socket will be assigned anew each time */
     cJSON_Delete(root);
+    httpd_resp_set_hdr(req, "Connection", "close");
     httpd_resp_sendstr(req, "Config updated successfully");
     return ESP_OK;
 }
@@ -344,69 +493,174 @@ static esp_err_t config_post_handler(httpd_req_t *req)
 // Returns a JSON object based on the current configuration stored in the global 'status' structure
 static esp_err_t config_get_handler(httpd_req_t *req)
 {
+    // 1. Stwórz korzeń dokumentu
     cJSON *root = cJSON_CreateObject();
-    if (!root) return ESP_FAIL;
+    if (!root) {
+        return ESP_FAIL;
+    }
 
-    // Create "general" section
+    // 2. Sekcja "general"
     cJSON *general = cJSON_CreateObject();
     cJSON_AddNumberToObject(general, "groups", status.total_groups);
-    cJSON_AddBoolToObject(general, "led", status.led ? true : false);
+    // status.display_number traktujemy jako "modules" (zgodnie z przykładem)
+    cJSON_AddNumberToObject(general, "modules", status.display_number);
+//    cJSON_AddBoolToObject(general, "led", status.led ? true : false);
+    cJSON_AddStringToObject(general, "time_zone", status.timezone);
     cJSON_AddItemToObject(root, "general", general);
 
-    // Create "groups" section
+    // 3. Sekcja "groups"
     cJSON *groups = cJSON_CreateObject();
     for (int i = 0; i < status.total_groups && i < MAX_GROUPS; i++) {
-        cJSON *group_obj = cJSON_CreateObject();
-        // Add start_position and end_position
-        cJSON_AddNumberToObject(group_obj, "start_position", status.groups[i].start_position);
-        cJSON_AddNumberToObject(group_obj, "end_position", status.groups[i].end_position);
+        char grp_name[16];
+        snprintf(grp_name, sizeof(grp_name), "group%d", i);
+        cJSON *g = cJSON_CreateObject();
 
-        // Build the "pattern" object by iterating from 0 to (end_position - start_position + 1)
-        cJSON *pattern_obj = cJSON_CreateObject();
-        int num_disp = status.groups[i].end_position - status.groups[i].start_position + 1;
-        if (num_disp < 0) num_disp = 0;
-        for (int j = 0; j < num_disp && j < MAX_DISPLAYS; j++) {
-            char key[16];
-            snprintf(key, sizeof(key), "disp%d", j);
-            cJSON_AddNumberToObject(pattern_obj, key, status.groups[i].pattern[j]);
-        }
-        cJSON_AddItemToObject(group_obj, "pattern", pattern_obj);
+        // pozycje
+        cJSON_AddNumberToObject(g, "start_position", status.groups[i].start_position);
+        cJSON_AddNumberToObject(g, "end_position",   status.groups[i].end_position);
 
-        // Add the separator field: if not SEP_NULL, add its string value, otherwise add null
-        const char *sep_str = separator_to_string(status.groups[i].separator);
-        if (sep_str) {
-            cJSON_AddStringToObject(group_obj, "separator", sep_str);
-        } else {
-            cJSON_AddNullToObject(group_obj, "separator");
-        }
-
-        // Add the mode field
-        cJSON_AddStringToObject(group_obj, "mode", mode_to_string(status.groups[i].mode));
-
-        // Add optional settings for specific modes (e.g., MQTT topic)
-        if (status.groups[i].mode == MODE_MQTT) {
-            if (strlen(status.groups[i].mqtt.topic) > 0) {
-                cJSON_AddStringToObject(group_obj, "topic", status.groups[i].mqtt.topic);
+        // pattern
+        cJSON *pattern = cJSON_CreateObject();
+        for (int j = 0; j < MAX_DISPLAYS; j++) {
+            if (status.groups[i].pattern[j] != 0) {
+                char disp_name[16];
+                snprintf(disp_name, sizeof(disp_name), "disp%d", j);
+                cJSON_AddNumberToObject(pattern, disp_name, status.groups[i].pattern[j]);
             }
         }
-        // Similarly, add timer, api, or clock settings if present
+        cJSON_AddItemToObject(g, "pattern", pattern);
 
-        char group_key[16];
-        snprintf(group_key, sizeof(group_key), "group%d", i);
-        cJSON_AddItemToObject(groups, group_key, group_obj);
+        // separator
+        if (status.groups[i].separator == SEP_NULL) {
+            cJSON_AddItemToObject(g, "separator", cJSON_CreateNull());
+        } else {
+            const char *sep_str = "null";
+            switch (status.groups[i].separator) {
+                case SEP_SPACE: sep_str = "space"; break;
+                case SEP_BLANK: sep_str = "blank"; break;
+                case SEP_COLON: sep_str = "colon"; break;
+                case SEP_DOT:   sep_str = "dot";   break;
+                case SEP_DASH:  sep_str = "dash";  break;
+                default: break;
+            }
+            cJSON_AddStringToObject(g, "separator", sep_str);
+        }
+
+        // mode
+        const char *mode_str = "none";
+        switch (status.groups[i].mode) {
+            case MODE_MQTT:       mode_str = "mqtt";       break;
+            case MODE_TIMER:      mode_str = "timer";      break;
+            case MODE_CLOCK:      mode_str = "clock";      break;
+            case MODE_MANUAL:     mode_str = "manual";     break;
+            case MODE_CUSTOM_API: mode_str = "custom-api"; break;
+            default: break;
+        }
+        cJSON_AddStringToObject(g, "mode", mode_str);
+
+        // pola dodatkowe w zależności od trybu
+        if (status.groups[i].mode == MODE_MQTT) {
+            cJSON_AddStringToObject(g, "topic", status.groups[i].mqtt.topic);
+        }
+        else if (status.groups[i].mode == MODE_TIMER) {
+            // wspólne
+            cJSON_AddNumberToObject(g, "intervalValue", status.groups[i].timer.interval);
+            const char *unit_str = "s";
+            switch (status.groups[i].timer.interval_unit) {
+                case INTERVAL_SECONDS: unit_str = "s"; break;
+                case INTERVAL_MINUTES: unit_str = "m"; break;
+                case INTERVAL_HOURS:   unit_str = "h"; break;
+                case INTERVAL_DAYS:    unit_str = "d"; break;
+                default: break;
+            }
+            cJSON_AddStringToObject(g, "intervalUnit", unit_str);
+            cJSON_AddBoolToObject(g, "alarm", status.groups[i].timer.alarm);
+
+            if (status.groups[i].timer.type == TIMER_ADVANCED) {
+                cJSON_AddStringToObject(g, "type", "advanced");
+                cJSON_AddNumberToObject(g, "cycles",           status.groups[i].timer.cycles);
+                cJSON_AddBoolToObject(g,   "showCurrentCycle", status.groups[i].timer.show_curr_cycle);
+                cJSON_AddNumberToObject(g, "work",             status.groups[i].timer.work_time);
+                cJSON_AddNumberToObject(g, "rest",             status.groups[i].timer.rest_time);
+            }
+            else if (status.groups[i].timer.type == TIMER_SIMPLE) {
+                cJSON_AddStringToObject(g, "type", "simple");
+                cJSON_AddNumberToObject(g, "from", status.groups[i].timer.count_from);
+                cJSON_AddNumberToObject(g, "to",   status.groups[i].timer.count_to);
+            }
+            else {
+                cJSON_AddStringToObject(g, "type", "none");
+            }
+        }
+        else if (status.groups[i].mode == MODE_CLOCK) {
+            // clock_unit
+            const char *cu = "none";
+            switch (status.groups[i].clock.type) {
+                case RTC_SECONDS: cu = "seconds"; break;
+                case RTC_MINUTES: cu = "minutes"; break;
+                case RTC_HOURS:   cu = "hours";   break;
+                case RTC_DAY:     cu = "day";     break;
+                case RTC_MONTCH:  cu = "month";   break;
+                case RTC_YEAR:    cu = "year";    break;
+                default: break;
+            }
+            cJSON_AddStringToObject(g, "clock_unit", cu);
+
+            // time_format
+            cJSON_AddStringToObject(
+                g,
+                "time_format",
+                status.groups[i].clock.time_format == FORMAT_12H ? "12h" : "24h"
+            );
+
+            // offset
+            cJSON_AddNumberToObject(g, "offset", status.groups[i].clock.time_offset);
+        }
+        else if (status.groups[i].mode == MODE_CUSTOM_API) {
+            cJSON_AddStringToObject(g, "endpoint", status.groups[i].api.url);
+            cJSON_AddStringToObject(
+                g,
+                "method",
+                status.groups[i].api.method == GET ? "GET" : "POST"
+            );
+            // headers (parsuj z zapisanego stringa lub twórz pusty obiekt)
+            cJSON *hdrs = NULL;
+            if (status.groups[i].api.headers[0]) {
+                hdrs = cJSON_Parse(status.groups[i].api.headers);
+            }
+            if (!hdrs) {
+                hdrs = cJSON_CreateObject();
+            }
+            cJSON_AddItemToObject(g, "headers", hdrs);
+
+            // body zawsze null (nie obsługujesz zapisu body w status)
+            cJSON_AddItemToObject(g, "body", cJSON_CreateNull());
+
+            // responseFormat
+            const char *rf = "json";
+            if (status.groups[i].api.format == XML)  rf = "xml";
+            if (status.groups[i].api.format == TEXT) rf = "text";
+            cJSON_AddStringToObject(g, "responseFormat", rf);
+
+            cJSON_AddStringToObject(g, "responseKeyPath", status.groups[i].api.key_patch);
+            cJSON_AddNumberToObject(g, "interval", status.groups[i].api.pulling_interval);
+        }
+
+        cJSON_AddItemToObject(groups, grp_name, g);
     }
     cJSON_AddItemToObject(root, "groups", groups);
 
-    char *resp_str = cJSON_PrintUnformatted(root);
-    if (!resp_str) {
-        cJSON_Delete(root);
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "JSON generation failed");
-        return ESP_FAIL;
-    }
+    // 4. Wyślij odpowiedź
+    char *response = cJSON_PrintUnformatted(root);
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr(req, resp_str);
-    free(resp_str);
+    httpd_resp_set_hdr(req, "Connection", "close");
+    httpd_resp_sendstr(req, response);
+
+    // 5. Sprzątanie
+      
+    cJSON_free(response);
     cJSON_Delete(root);
+
     return ESP_OK;
 }
 
@@ -781,6 +1035,69 @@ static esp_err_t mqtt_post_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+/**
+ * Handler for POST /api/v1/led
+ * Expects a JSON object: { "status": true/false }
+ * Updates global status.led accordingly.
+ */
+static esp_err_t led_post_handler(httpd_req_t *req)
+{
+    // Read Content-Length
+    int total_len = req->content_len;
+    if (total_len >= SCRATCH_BUFSIZE) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Content too long");
+        return ESP_FAIL;
+    }
+
+    // Read the request body into scratch buffer
+    rest_server_context_t *rest_context = (rest_server_context_t *)req->user_ctx;
+    char *buf = rest_context->scratch;
+    int received = 0, cur_len = 0;
+    while (cur_len < total_len) {
+        received = httpd_req_recv(req, buf + cur_len, total_len - cur_len);
+        if (received <= 0) {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive data");
+            return ESP_FAIL;
+        }
+        cur_len += received;
+    }
+    buf[cur_len] = '\0';
+
+    // Parse JSON payload
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    // Get the "status" field
+    cJSON *status_item = cJSON_GetObjectItem(root, "status");
+    if (!status_item || !(cJSON_IsBool(status_item) || cJSON_IsNumber(status_item))) {
+        cJSON_Delete(root);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing or invalid 'status'");
+        return ESP_FAIL;
+    }
+
+    // Update global LED status
+    if (cJSON_IsBool(status_item)) {
+        status.led = cJSON_IsTrue(status_item) ? 1 : 0;
+    } else {
+        status.led = (status_item->valueint != 0) ? 1 : 0;
+    }
+    
+    LED_set_color(RED, 1);
+
+    // Optionally notify other tasks that LED state changed
+    // xSemaphoreGive(xNewDataSemaphore);
+
+    cJSON_Delete(root);
+
+    // Send confirmation response
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"result\": \"LED status updated\"}");
+    return ESP_OK;
+}
+
 /* Handler for GET /api/v1/display */
 static esp_err_t display_get_handler(httpd_req_t *req)
 {
@@ -790,6 +1107,66 @@ static esp_err_t display_get_handler(httpd_req_t *req)
     httpd_resp_sendstr(req, resp);
     return ESP_OK;
 }
+
+/**
+ * Handler for GET /api/v1/led
+ * Returns the current LED status as JSON: { "status": true/false }
+ */
+static esp_err_t led_get_handler(httpd_req_t *req)
+{
+    // Set response content type to JSON
+    httpd_resp_set_type(req, "application/json");
+
+    // Prepare JSON payload with current status.led
+    char resp[32];
+    // status.led is an integer (0/1), convert to "true"/"false"
+    snprintf(resp, sizeof(resp),
+             "{\"status\": %s}",
+             status.led ? "true" : "false");
+
+    // Send response and close the connection
+    httpd_resp_sendstr(req, resp);
+    return ESP_OK;
+}
+
+// -----------------------------------------------------------------------------
+// 	  Handler for GET /api/v1/pattern
+//    Returns a JSON array [status.current_pattern[0], status.current_pattern[1], …]
+//    No WebSocket, no semaphore — just a one‐shot HTTP response.
+// -----------------------------------------------------------------------------
+
+static esp_err_t pattern_get_handler(httpd_req_t *req)
+{
+    // Set response type to JSON
+    httpd_resp_set_type(req, "application/json");
+
+    // Create a cJSON array and fill it with current_pattern values
+    cJSON *arr = cJSON_CreateArray();
+    if (!arr) {
+        // If allocation failed, send 500
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to create JSON array");
+        return ESP_FAIL;
+    }
+
+    for (int i = 0; i < status.display_number; ++i) {
+        cJSON_AddItemToArray(arr, cJSON_CreateNumber(status.current_pattern[i]));
+    }
+
+    // Print JSON array as a compact string
+    char *json = cJSON_PrintUnformatted(arr);
+    cJSON_Delete(arr);
+    if (!json) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to serialize JSON");
+        return ESP_FAIL;
+    }
+
+    // Send JSON string and close connection
+    httpd_resp_sendstr(req, json);
+    cJSON_free(json);
+
+    return ESP_OK;
+}
+
 
 /* Handler for GET /api/v1/mode */
 static esp_err_t mode_get_handler(httpd_req_t *req)
@@ -908,6 +1285,78 @@ static esp_err_t mode_post_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// Handler for POST /api/v1/clock
+// Expects a JSON array: [second, minute, hour, day, month, year]
+static esp_err_t clock_post_handler(httpd_req_t *req)
+{
+    rest_server_context_t *rest_context = (rest_server_context_t *)req->user_ctx;
+    int total_len = req->content_len;
+
+    // Reject if payload is too large for our scratch buffer
+    if (total_len >= SCRATCH_BUFSIZE) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Content too long");
+        return ESP_FAIL;
+    }
+
+    // Read the entire request body into our buffer
+    char *buf = rest_context->scratch;
+    int received = httpd_req_recv(req, buf, total_len);
+    if (received <= 0) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive data");
+        return ESP_FAIL;
+    }
+    buf[received] = '\0';
+
+    // Parse the JSON payload
+    cJSON *root = cJSON_Parse(buf);
+    if (!root || !cJSON_IsArray(root) || cJSON_GetArraySize(root) != 6) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Expected JSON array of 6 numbers");
+        cJSON_Delete(root);
+        return ESP_FAIL;
+    }
+
+    // Assign each element of the array to the corresponding RTC field
+    cJSON *item;
+    item = cJSON_GetArrayItem(root, 0);
+    if (cJSON_IsNumber(item)) status.rtc.second = (uint8_t)item->valueint;
+    item = cJSON_GetArrayItem(root, 1);
+    if (cJSON_IsNumber(item)) status.rtc.minute = (uint8_t)item->valueint;
+    item = cJSON_GetArrayItem(root, 2);
+    if (cJSON_IsNumber(item)) status.rtc.hour   = (uint8_t)item->valueint;
+    item = cJSON_GetArrayItem(root, 3);
+    if (cJSON_IsNumber(item)) status.rtc.day    = (uint8_t)item->valueint;
+    item = cJSON_GetArrayItem(root, 4);
+    if (cJSON_IsNumber(item)) status.rtc.month  = (uint8_t)item->valueint;
+    item = cJSON_GetArrayItem(root, 5);
+    if (cJSON_IsNumber(item)) status.rtc.year   = (uint8_t)item->valueint;
+
+	//Update RTC
+	uint8_t current_time[7];
+	
+	current_time[0] = status.rtc.second;
+	current_time[1] = status.rtc.minute;
+	current_time[2] = status.rtc.hour;
+	current_time[3] = 1;
+	current_time[4] = status.rtc.day;
+	current_time[5] = status.rtc.month;
+	current_time[6] = status.rtc.year;
+	
+	//ESP_LOGI(REST_TAG, "RAW CLOCK %d:%d:%d %d:%d:%d", status.rtc.hour, status.rtc.minute, status.rtc.second, status.rtc.day, status.rtc.month, status.rtc.year);
+	
+	// Clean up JSON object
+    cJSON_Delete(root);
+
+	ds3231_set(TIME, current_time);
+
+    // Notify other tasks that new RTC data is available (if you use a semaphore)
+    //xSemaphoreGive(xNewDataSemaphore);
+
+    // Send response and close the connection
+    httpd_resp_set_hdr(req, "Connection", "close");
+    httpd_resp_sendstr(req, "RTC updated successfully");
+    return ESP_OK;
+}
+
 esp_err_t start_rest_server(const char *base_path)
 {
     REST_CHECK(base_path, "wrong base path", err);
@@ -918,7 +1367,7 @@ esp_err_t start_rest_server(const char *base_path)
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 16;
+    config.max_uri_handlers = 20;
 
     ESP_LOGI(REST_TAG, "Starting HTTP Server");
     REST_CHECK(httpd_start(&server, &config) == ESP_OK, "Start server failed", err_start);
@@ -978,6 +1427,15 @@ esp_err_t start_rest_server(const char *base_path)
         .user_ctx = rest_context
     };
     httpd_register_uri_handler(server, &display_get_uri);
+    
+	httpd_uri_t pattern_get_uri = {
+	    .uri      = "/api/v1/pattern",      
+	    .method   = HTTP_GET,               
+	    .handler  = pattern_get_handler,    
+	    .user_ctx = rest_context
+	};
+	httpd_register_uri_handler(server, &pattern_get_uri);
+    
 
     httpd_uri_t mode_get_uri = {
         .uri      = "/api/v1/mode",
@@ -1019,6 +1477,32 @@ esp_err_t start_rest_server(const char *base_path)
     };
     httpd_register_uri_handler(server, &ota_both_post_uri);
     
+    // In start_rest_server(), register the new /api/v1/clock POST endpoint:
+	httpd_uri_t clock_post_uri = {
+	    .uri      = "/api/v1/clock",
+	    .method   = HTTP_POST,
+	    .handler  = clock_post_handler,
+	    .user_ctx = rest_context
+	};
+	httpd_register_uri_handler(server, &clock_post_uri);
+	
+	httpd_uri_t led_get_uri = {
+        .uri      = "/api/v1/led",
+        .method   = HTTP_GET,
+        .handler  = led_get_handler,
+        .user_ctx = rest_context
+    };
+    httpd_register_uri_handler(server, &led_get_uri);
+
+    // Register POST /api/v1/led
+    httpd_uri_t led_post_uri = {
+        .uri      = "/api/v1/led",
+        .method   = HTTP_POST,
+        .handler  = led_post_handler,
+        .user_ctx = rest_context
+    };
+    httpd_register_uri_handler(server, &led_post_uri);	
+    
     httpd_uri_t common_get_uri = {
         .uri      = "/*",
         .method   = HTTP_GET,
@@ -1033,3 +1517,4 @@ err_start:
 err:
     return ESP_FAIL;
 }
+

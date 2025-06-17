@@ -39,14 +39,13 @@
 #include "esp_http_server.h"
 #include "nvs.h"
 #include "nvs_flash.h"
-#include "main.h"
 
-const char *CONFIG_TAG = "CONFIG";
 
-enum pp_separator_t parse_separator(const char *sep_str);
-const char *separator_to_string(enum pp_separator_t sep);
-enum pp_mode_t parse_mode(const char *mode_str);
-const char *mode_to_string(enum pp_mode_t mode);
+esp_err_t save_config_to_nvs(void);
+esp_err_t load_config_from_nvs(void);
+esp_err_t factory_reset_config(void);
+bool is_first_run(void);
+void show_config(void);
 
 
 #endif /* MAIN_CONFIG_H_ */

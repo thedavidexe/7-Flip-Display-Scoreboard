@@ -13,7 +13,7 @@
 
 #define SERVER  "SERVER"
 #define MDNS_INSTANCE "7-Flip Display Server"
-#define CONFIG_EXAMPLE_MDNS_HOST_NAME "esp-home"
+#define CONFIG_EXAMPLE_MDNS_HOST_NAME "flip-display"
 #define CONFIG_WWW_0_MOUNT_POINT "/www_0"
 #define CONFIG_WWW_1_MOUNT_POINT "/www_1"
 
@@ -22,5 +22,6 @@
 #define MODE_STA 1   // Station mode
 
 void RestfulServerTask(void *arg);
+void notify_pattern_change(void);
 
 #endif /* MAIN_ESP_REST_MAIN_H_ */

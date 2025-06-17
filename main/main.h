@@ -45,6 +45,10 @@
 #include "sdkconfig.h"
 #include "status_led.h"
 #include "74AHC595.h"
+#include "rtc.h"
+#include "mqtt_com.h"
+#include "led.h"
+
 
 /* Macros for setting a key in a variable */
 #define SET_KEY(state, key)    ((state) |= (key))      		/* Set bit to 1 */
@@ -53,9 +57,10 @@
 
 
 #define FIRM 				"FIRMWARE"
-#define MAX_GROUPS 			10
-#define MAX_DISPLAYS		10
+#define MAX_GROUPS 			15
+#define MAX_DISPLAYS		15
 
+/* General Settings */
 enum pp_separator_t {
 	SEP_NULL,
 	SEP_SPACE,
@@ -70,31 +75,81 @@ enum pp_mode_t {
 	MODE_MQTT,
 	MODE_TIMER,
 	MODE_CLOCK,
-	MODE_MANNUAL,
+	MODE_MANUAL,
 	MODE_CUSTOM_API
 };
 
+enum PP_display_symbol_mode {
+	SINGLE_SEGMENT,
+	SINGLE_MODUL,
+	ALL_DISPLAY
+};
+
 /* Timer Settings */
-enum pp_timer_mode_t {
-	TIMER_UP,
-	TIMER_DOWN,
-	TIMER_INTERVAL
+enum pp_timer_type_t {
+	TIMER_NONE,
+	TIMER_SIMPLE,
+	TIMER_ADVANCED
+};
+
+enum pp_timer_interval_unit_t {
+	INTERVAL_SECONDS = 1,
+	INTERVAL_MINUTES = 60,
+	INTERVAL_HOURS = 3600,
+	INTERVAL_DAYS = 86400
+};
+
+enum pp_timer_dir_t {
+	COUNT_OFF,
+	COUNT_UP,
+	COUNT_DOWN
 };
 
 typedef struct {
-	enum pp_timer_mode_t mode;
-	uint32_t value;
+	enum pp_timer_type_t type;
+	enum pp_timer_interval_unit_t interval_unit;
+	bool alarm;
+	bool show_curr_cycle;
+	uint16_t count_from;
+	uint16_t count_to;
+	uint16_t work_time;
+	uint16_t  rest_time;
+	uint16_t interval;
+	uint8_t cycles;
+	int value;
+	enum pp_timer_dir_t direction;
 } timer_settings_t;
 
+
 /* Clock Settings */
+enum pp_clock_type_t {
+	RTC_NONE,
+	RTC_SECONDS,
+	RTC_MINUTES,
+	RTC_HOURS,
+	RTC_DAY,
+	RTC_MONTCH,
+	RTC_YEAR
+};
+
+enum pp_time_format_t {
+	FORMAT_24H,
+	FORMAT_12H
+};
+
 typedef struct {
-	char timezone[100];
+	enum pp_clock_type_t type;
+	enum pp_time_format_t time_format;
+	int time_offset;
+	bool time_tormat;
 }clock_settings_t;
+
 
 /* MQTT Settings */
 typedef struct {
 	char topic[10]; 
 } mqtt_settings_t;
+
 
 /* CUSTOM-API Settings */
 enum pp_rest_method_t {
@@ -102,9 +157,18 @@ enum pp_rest_method_t {
 	GET
 };
 
+enum pp_response_format_t {
+	JSON,
+	XML,
+	TEXT
+};
+
 typedef struct {
-	char url[100];
+	char url[150];
+	char key_patch[50];
+	char headers[150];
 	enum pp_rest_method_t method;
+	enum pp_response_format_t format;
 	uint8_t pulling_interval;
 } api_settings_t;
 
@@ -113,8 +177,7 @@ typedef struct {
     int end_position;           
     int pattern[MAX_DISPLAYS];           
     enum pp_separator_t separator;  
-    enum pp_mode_t mode; 
-	/* Optional */                 
+    enum pp_mode_t mode;               
     mqtt_settings_t mqtt;
     timer_settings_t timer;
     api_settings_t api;
@@ -142,9 +205,12 @@ typedef struct {
 	uint8_t display_number;
 	rtc_t rtc;
 	enum pp_alert_t alert;
-	int led;
+	bool led;
 	int total_groups;
+	char timezone[100];
+	uint8_t current_pattern[MAX_DISPLAYS];
 	display_group_t groups[MAX_GROUPS];
+	enum PP_display_symbol_mode display_symbol_mode;
 } status_t;
 
 #endif /* MAIN_MAIN_H_ */

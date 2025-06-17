@@ -20,6 +20,7 @@ if("${CONFIG}" STREQUAL "" OR "${CONFIG}" STREQUAL "")
   "main.bin"
   "main.map"
   "project_elf_src_esp32.c"
+  "www_0.bin"
   "x509_crt_bundle.S"
   )
 endif()

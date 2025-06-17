@@ -36,7 +36,6 @@
 extern status_t status;
 static int last_data_bit = -1;
 
-
 /* Helper function to initialize GPIO */
 esp_err_t gpio_init(gpio_int_type_t type, gpio_mode_t mode, gpio_pulldown_t pull_down, gpio_pullup_t pull_up, int no, uint8_t initial_state)
 {
@@ -92,7 +91,8 @@ esp_err_t shift_register_init(void)
 	if(err != ESP_OK){
 		return err;
 	}
-    
+	
+ 
     return ESP_OK;
 }
 
@@ -317,39 +317,70 @@ void DisplayDigit(uint8_t digit, uint8_t target)
  */
 void DisplayNumber(uint32_t number, uint8_t group)
 {
-    uint8_t digits[10];  // Buffer to hold up to 10 digits (sufficient for a uint32_t).
-    uint8_t count = 0;
-    
-    // Special case: if number is 0, add a single digit '0'.
-    if (number == 0)
-    {
-         digits[count++] = 0;
+    uint8_t raw_digits[10];
+    uint8_t raw_count = 0;
+    uint8_t start_pos = status.groups[group].start_position;
+    uint8_t end_pos   = status.groups[group].end_position;
+    uint8_t displays_count = end_pos - start_pos + 1;
+
+    // 1) Split the number into digits (most-significant first)
+    if (number == 0) {
+        raw_digits[raw_count++] = 0;
+    } else {
+        // extract digits least-significant first
+        while (number > 0 && raw_count < sizeof(raw_digits)) {
+            raw_digits[raw_count++] = number % 10;
+            number /= 10;
+        }
+        // reverse array to MSB-first order
+        for (uint8_t i = 0; i < raw_count / 2; ++i) {
+            uint8_t tmp = raw_digits[i];
+            raw_digits[i] = raw_digits[raw_count - 1 - i];
+            raw_digits[raw_count - 1 - i] = tmp;
+        }
     }
-    else
-    {
-         // Extract individual digits (least significant first).
-         while (number > 0)
-         {
-              digits[count] = number % 10;    
-              number /= 10;        
-              count++;
-         }
-         // Reverse the digit array so the most significant digit is first.
-         for (int i = 0; i < count / 2; i++)
-         {
-              uint8_t temp = digits[i];
-              
-              digits[i] = digits[count - 1 - i];
-              digits[count - 1 - i] = temp;
-         }
+
+    // 2) If too many digits, keep only the least-significant ones
+    if (raw_count > displays_count) {
+        memmove(raw_digits,
+                &raw_digits[raw_count - displays_count],
+                displays_count);
+        raw_count = displays_count;
     }
-      
-    // Sequentially update each display starting from the most significant digit.
-    // For a number with 'count' digits, the update for the digit at index 'i'
-    // is performed by shifting a chain with length = (count - i).
-    for (uint8_t i = status.groups[group].start_position; i <= status.groups[group].end_position; i++)
-    {    
-        DisplayDigit(digits[i - status.groups[group].start_position], i);
+
+    // 3) Build final array with leading zeros
+    uint8_t digits[10];
+    uint8_t leading_zeros = (displays_count > raw_count)
+                            ? (displays_count - raw_count)
+                            : 0;
+    // fill leading positions with zero
+    for (uint8_t i = 0; i < leading_zeros; ++i) {
+        digits[i] = 0;
+    }
+    // copy the extracted digits after zeros
+    for (uint8_t i = 0; i < raw_count; ++i) {
+        digits[i + leading_zeros] = raw_digits[i];
+    }
+
+    // 4) Send to displays — only update changed digits
+    for (uint8_t pos = start_pos; pos <= end_pos; ++pos) {
+        uint8_t idx   = pos - start_pos;
+//        uint8_t new_d = digits[idx];                    // new digit to show
+//        uint8_t old_d = status.groups[group].pattern[idx];  // last-shown digit
+
+        // only refresh if digit actually changed
+//        if (new_d != old_d) {
+//            DisplayDigit(new_d, pos);
+            
+             DisplayDigit(digits[idx], pos);
+            
+           // ESP_LOGI(DISP, "old: %d", status.groups[group].pattern[idx]);
+            
+            // update our status buffer immediately
+           // status.groups[group].pattern[idx] = new_d;
+            
+            //ESP_LOGI(DISP, "new: %d", status.groups[group].pattern[idx]);
+//        }
     }
 }
 
@@ -366,44 +397,167 @@ void DisplayNumber(uint32_t number, uint8_t group)
  * @param pattern 16-bit pattern to be displayed.
  * @param target Display number (1 = least significant, etc.).
  */
+//void DisplaySymbol(uint8_t pattern_raw, uint8_t target)
+//{
+//    // Retrieve the number of displays detected (set by detect_display_count).
+//    uint8_t total = status.display_number;
+//    uint16_t pattern;
+//    uint16_t chain[status.display_number]; 
+//	uint8_t pattern_old = status.current_pattern[target];
+//
+//	if(pattern_old != pattern_raw)
+//	{
+//		pattern = get_symbol_pattern(pattern_raw);
+//		status.current_pattern[target] = pattern_raw;
+//		
+//		// Check if the given display number is valid.
+//    	if (target > (total - 1))
+//        	return;
+//		
+//	    // If the current iteration corresponds to the target display,
+//	    // set the pattern; otherwise, set 0 (turn off).
+//	    for (uint8_t i = 0; i < total; i++) {
+//	        chain[i] = (i == target) ? pattern : 0x0000;
+//	    }
+//	    
+//	    // Enable power to the displays.
+//	    gpio_set_level(POWER_PIN, 1);
+//	
+//	    // Send the prepared chain to the shift registers.
+//	    shift_register_send_chain(chain, total);
+//	
+//	    // Wait 100 ms to allow for the mechanical movement of the segments.
+//	    vTaskDelay(100 / portTICK_PERIOD_MS);
+//	
+//	    
+//	    for (uint8_t i = 0; i < total; i++) {
+//	        chain[i] = 0x0000;
+//	    }
+//	    // Turn off coil  drivers for the updated module by sending zeros.
+//	    shift_register_send_chain(chain, total);
+//	
+//	    // Short delay before updating the next display.
+//	    vTaskDelay(1 / portTICK_PERIOD_MS);
+//	
+//	    // Disable power to the displays.
+//	    gpio_set_level(POWER_PIN, 0);
+//    }
+//    
+////	printf("Pattern: ");
+////	for(uint8_t i = 0; i < status.display_number; i++)
+////		printf("%d ", status.current_pattern[i]);
+////	
+////	printf("\r\n");
+//}
 void DisplaySymbol(uint8_t pattern_raw, uint8_t target)
 {
-    // Retrieve the number of displays detected (set by detect_display_count).
     uint8_t total = status.display_number;
-    uint16_t pattern = get_symbol_pattern(pattern_raw);
-    uint16_t chain[status.display_number]; 
+    uint8_t previous_pattern = status.current_pattern[target];
 
-    // Check if the given display number is valid.
-    if (target > (total - 1))
+    if (previous_pattern == pattern_raw || target >= total) {
         return;
-
-    // If the current iteration corresponds to the target display,
-    // set the pattern; otherwise, set 0 (turn off).
-    for (uint8_t i = 0; i < total; i++) {
-        chain[i] = (i == target) ? pattern : 0x0000;
     }
-    
-    // Enable power to the displays.
-    gpio_set_level(POWER_PIN, 1);
 
-    // Send the prepared chain to the shift registers.
-    shift_register_send_chain(chain, total);
+    // Update the stored pattern for this display
+    status.current_pattern[target] = pattern_raw;
 
-    // Wait 100 ms to allow for the mechanical movement of the segments.
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+    if (status.display_symbol_mode == SINGLE_SEGMENT) {
+        // Map segment indices for get_symbol_pattern
+        static const int bitMap[7] = { 4, 3, 2, 5, 6, 0, 1 };
 
-    
-    for (uint8_t i = 0; i < total; i++) {
-        chain[i] = 0x0000;
+        // Toggle each segment that changed
+        for (uint8_t seg = 0; seg < 7; seg++) {
+            bool was_on = (previous_pattern & (1 << seg));
+            bool now_on = (pattern_raw & (1 << seg));
+            uint16_t pulse_pattern = 0;
+
+            if (!was_on && now_on) {
+                // On-pulse: extract two bits for this segment
+                uint16_t full = get_symbol_pattern((uint8_t)(1 << seg));
+                int idx = 0;
+                for (; idx < 7; idx++) {
+                    if (bitMap[idx] == seg) break;
+                }
+                int shift = (6 - idx) * 2;
+                pulse_pattern = full & ((uint16_t)0x0003 << shift);
+            }
+            else if (was_on && !now_on) {
+                // Off-pulse: reverse phase in the two bits
+                int idx = 0;
+                for (; idx < 7; idx++) {
+                    if (bitMap[idx] == seg) break;
+                }
+                int shift = (6 - idx) * 2;
+                pulse_pattern = (uint16_t)0x0002 << shift;
+            }
+            else {
+                // No change for this segment
+                continue;
+            }
+
+            // Build shift register chain for only the target display
+            uint16_t chain[total];
+            for (uint8_t i = 0; i < total; i++) {
+                chain[i] = (i == target) ? pulse_pattern : 0x0000;
+            }
+
+            // Enable power and send pulse
+            gpio_set_level(POWER_PIN, 1);
+            shift_register_send_chain(chain, total);
+            // Wait for actuator movement
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+            // Clear outputs to release coils
+            for (uint8_t i = 0; i < total; i++) {
+                chain[i] = 0x0000;
+            }
+            shift_register_send_chain(chain, total);
+            // Short pause before next segment
+            vTaskDelay(1 / portTICK_PERIOD_MS);
+            // Disable power
+            gpio_set_level(POWER_PIN, 0);
+        }
     }
-    // Turn off coil  drivers for the updated module by sending zeros.
-    shift_register_send_chain(chain, total);
+    else if (status.display_symbol_mode == ALL_DISPLAY) {
+        // Full-display mode: apply the same pattern to all displays
+        uint16_t full = get_symbol_pattern(pattern_raw);
+        uint16_t chain[total];
 
-    // Short delay before updating the next display.
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+        // Fill chain so every display receives the full pattern
+        for (uint8_t i = 0; i < total; i++) {
+            chain[i] = full;
+        }
 
-    // Disable power to the displays.
-    gpio_set_level(POWER_PIN, 0);
+        // Enable power and update all displays
+        gpio_set_level(POWER_PIN, 1);
+        shift_register_send_chain(chain, total);
+        // Wait for mechanical response
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+        // Clear outputs to release coils
+        for (uint8_t i = 0; i < total; i++) {
+            chain[i] = 0x0000;
+        }
+        shift_register_send_chain(chain, total);
+        vTaskDelay(1 / portTICK_PERIOD_MS);
+        gpio_set_level(POWER_PIN, 0);
+    }
+    else {
+        // Single-display mode: update only the targeted display
+        uint16_t full = get_symbol_pattern(pattern_raw);
+        uint16_t chain[total];
+        for (uint8_t i = 0; i < total; i++) {
+            chain[i] = (i == target) ? full : 0x0000;
+        }
+
+        gpio_set_level(POWER_PIN, 1);
+        shift_register_send_chain(chain, total);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+        for (uint8_t i = 0; i < total; i++) {
+            chain[i] = 0x0000;
+        }
+        shift_register_send_chain(chain, total);
+        vTaskDelay(1 / portTICK_PERIOD_MS);
+        gpio_set_level(POWER_PIN, 0);
+    }
 }
 
 
@@ -470,3 +624,51 @@ uint8_t detect_display_count(void)
     
     return display_count;
 }
+
+void GenerateAlarm(uint8_t group)
+{
+	vTaskDelay(500/ portTICK_PERIOD_MS);
+	
+	for(uint8_t i = 0; i < 5; i++)
+	{
+		DisplaySymbol(127, 4);
+		DisplaySymbol(127, 5);
+		DisplaySymbol(0, 4);
+		DisplaySymbol(0, 5);
+	}
+	
+	DisplaySymbol(64, 4);
+	DisplaySymbol(64, 5);
+}
+
+void DemoMode(uint8_t mode)
+{
+	
+	if(mode ==1)
+	{
+		for(uint8_t a = 0; a < 1; a++)
+		{
+			for(uint8_t i = 0; i < 10; i++)
+			{
+				for(uint8_t j = 0; j < 6; j++)
+				{
+					DisplayDigit(i, j);
+				}
+				vTaskDelay(1000/ portTICK_PERIOD_MS);
+			}
+			
+			for(uint8_t j = 0; j < 6; j++)
+			{
+				DisplayDigit(10, j);
+			}
+		}
+	}
+	else if(mode == 2)
+	{
+		
+	}
+}
+
+
+
+

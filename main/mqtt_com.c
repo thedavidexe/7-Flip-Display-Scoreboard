@@ -152,6 +152,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             char data_buf[128];
             int tlen = (event->topic_len < MQTT_MAX_TOPICS_LEN) ? event->topic_len : MQTT_MAX_TOPICS_LEN;
             int dlen = (event->data_len < (int)sizeof(data_buf) - 1) ? event->data_len : (int)sizeof(data_buf) - 1;
+            
+            LED_set_color(GREEN, 1);
+            
             memcpy(topic_buf, event->topic, tlen);
             topic_buf[tlen] = '\0';
             memcpy(data_buf, event->data, dlen);
@@ -169,6 +172,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 					}
 				}
 			}
+			
+			LED_set_color(RED, 1);
             
             break;
         }
@@ -211,9 +216,11 @@ void mqtt_publish(const char *topic, const char *payload) {
  * When a configuration change is notified (via xTaskNotifyGive), the task stops
  * the current client, reloads configuration, and reconnects.
  */
-void mqtt_task(void *pvParameters) {
+void mqtt_task(void *pvParameters) 
+{
     mqtt_task_handle = xTaskGetCurrentTaskHandle();
     mqtt_load_config_from_nvs();
+    
     if (!mqtt_cfg.enabled) {
         ESP_LOGI(MQTT_TAG, "MQTT is disabled in configuration");
     }

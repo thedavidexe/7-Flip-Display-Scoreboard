@@ -60,6 +60,7 @@ void DisplaySymbol(uint8_t pattern_raw, uint8_t target);
 uint8_t detect_display_count(void);
 void Send2Register(uint16_t data);
 void DisplayDigit(uint8_t digit, uint8_t target);
-
+void GenerateAlarm(uint8_t group);
+void DemoMode(uint8_t mode);
 
 #endif /* MAIN_74AHC595_H_ */

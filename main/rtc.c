@@ -28,6 +28,9 @@
  * For more information, visit: https://smartsolutions4home.com/7-flip-display
  */
 
+#include "74AHC595.h"
+#include "driver/gpio.h"
+#include "freertos/idf_additions.h"
 #include "hal/gpio_types.h"
 #include "main.h"
 #include "freertos/task.h"
@@ -39,6 +42,7 @@
 #include "rtc.h"
 
 extern status_t status;
+extern SemaphoreHandle_t xPeriodicSemaphore;
 
 uint8_t just_once_flag = 0;
 
@@ -70,6 +74,116 @@ static uint8_t register_default_value[] = {       /*used in reset function, cont
   DS3231_REGISTER_CONTROL_STATUS_DEFAULT,
   DS3231_REGISTER_AGING_OFFSET_DEFAULT,
 };
+
+// ISR – przełącza pin TOGGLE_GPIO
+static void IRAM_ATTR ds3231_isr_handler(void* arg) 
+{
+	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+	// If the object is received from the web application, pass it for handling
+	xSemaphoreGiveFromISR(xPeriodicSemaphore, &xHigherPriorityTaskWoken);
+	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+}
+
+//static void setup_gpio_interrupt(void)
+//{
+//    uint8_t ctrl;
+//    uint8_t alarm2_cfg[3] = {
+//        (1 << DS3231_BIT_A2M2),   // A2M2 = 1 → mask minutes  
+//        (1 << DS3231_BIT_A2M3),   // A2M3 = 1 → mask hours    
+//        (1 << DS3231_BIT_A2M4)    // A2M4 = 1 → mask day/date
+//    };
+//
+//    // 1. Configure GPIO for INT/SQW pin
+//    gpio_config_t io_conf = {
+//        .pin_bit_mask = 1ULL << RTC_INT_PIN,
+//        .mode         = GPIO_MODE_INPUT,
+//        .pull_up_en   = GPIO_PULLUP_ENABLE,    // INT/SQW requires pull-up
+//        .pull_down_en = GPIO_PULLDOWN_DISABLE, 
+//        .intr_type    = GPIO_INTR_NEGEDGE       // interrupt on falling edge (active-low)
+//    };
+//    gpio_config(&io_conf);
+//
+//    // 2. Enable Alarm2 interrupt (A2IE) and INTCN in CONTROL register
+//    ds3231_read(CONTROL, &ctrl);               // read current CONTROL value
+//    ctrl |= (1 << DS3231_BIT_INTCN);           // INTCN = 1 → interrupt mode
+//    ctrl |= (1 << DS3231_BIT_A2IE);            // A2IE  = 1 → enable Alarm2
+//    ds3231_set(CONTROL, &ctrl);                // write back to CONTROL
+//
+//    // 3. Program Alarm2 registers: mask minutes, hours and day/date → triggers every minute at sec = 00
+//    time_i2c_write_multi(
+//        DS3231_I2C_ADDRESS,
+//        DS3231_REGISTER_ALARM2_MINUTES,
+//        alarm2_cfg,
+//        sizeof(alarm2_cfg)
+//    );
+//
+//    // 4. Clear any pending Alarm2 flag in STATUS register
+//    uint8_t status;
+//    ds3231_read(CONTROL_STATUS, &status);
+//    status &= ~(1 << DS3231_BIT_A2F);          // clear A2F flag
+//    ds3231_set(CONTROL_STATUS, &status);
+//
+//    // 5. Install ISR service and attach handler
+//    gpio_install_isr_service(0);
+//    gpio_isr_handler_add(RTC_INT_PIN, ds3231_isr_handler, (void*) RTC_INT_PIN);
+//}
+static void setup_rtc_interrupts(void)
+{
+    // GPIO configuration for INT/SQW pin ---
+    gpio_config_t io_conf = {
+        .pin_bit_mask = 1ULL << RTC_INT_PIN,
+        .mode         = GPIO_MODE_INPUT,
+        .pull_up_en   = GPIO_PULLUP_ENABLE,    /* INT/SQW is open-drain, needs pull-up */
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type    = GPIO_INTR_NEGEDGE       /* active-low pulse */
+    };
+    gpio_config(&io_conf);
+
+    // Force INT/SQW output to interrupt mode (no SQW output) ---
+    uint8_t ctrl;
+    ds3231_read(CONTROL, &ctrl);
+    ctrl |= (1 << DS3231_BIT_INTCN);           /* INTCN = 1 → interrupt mode */
+    ctrl |=  (1 << DS3231_BIT_A1IE);
+    ctrl &= ~(1 << DS3231_BIT_A2IE); 
+    ds3231_set(CONTROL, &ctrl);
+
+    // Program Alarm1 for 1-second interrupts (A1M1–A1M4 = 1) ---
+    uint8_t alarm1_cfg[4] = {
+        (1 << DS3231_BIT_A1M1),  /* A1M1 = 1: mask seconds */
+        (1 << DS3231_BIT_A1M2),  /* A1M2 = 1: mask minutes */
+        (1 << DS3231_BIT_A1M3),  /* A1M3 = 1: mask hours */
+        (1 << DS3231_BIT_A1M4)   /* A1M4 = 1: mask day/date */
+    };
+    time_i2c_write_multi(
+        DS3231_I2C_ADDRESS,
+        DS3231_REGISTER_ALARM1_SECONDS,
+        alarm1_cfg,
+        sizeof(alarm1_cfg)
+    );
+
+//    // Program Alarm2 for 1-minute interrupts (A2M2–A2M4 = 1) ---
+//    uint8_t alarm2_cfg[3] = {
+//        (1 << DS3231_BIT_A2M2),  /* A2M2 = 1: mask minutes */
+//        (1 << DS3231_BIT_A2M3),  /* A2M3 = 1: mask hours */
+//        (1 << DS3231_BIT_A2M4)   /* A2M4 = 1: mask day/date */
+//    };
+//    time_i2c_write_multi(
+//        DS3231_I2C_ADDRESS,
+//        DS3231_REGISTER_ALARM2_MINUTES,
+//        alarm2_cfg,
+//        sizeof(alarm2_cfg)
+//    );
+
+    // Clear any pending flags just in case ---
+    CLEAR_ONE_SEC_FLAG();
+    CLEAR_ONE_MIN_FLAG();
+
+    // Install ISR service and hook up handler (handler only gives semaphore) ---
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(RTC_INT_PIN, ds3231_isr_handler, (void*)RTC_INT_PIN);
+}
+
 
 //LOW level API
 /*function to transmit one byte of data to register_address on ds3231 (device_address: 0X68)*/
@@ -127,7 +241,7 @@ void ds3231_I2C_init()
 	err = i2c_param_config(i2c_master_port, &conf);
 	if(err != ESP_OK)
 	{
-		SetAlarm(HARDWARE_PROBLEM);
+		return;
 	}
 
 	i2c_driver_install(i2c_master_port, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
@@ -144,9 +258,10 @@ void ds3231_init(uint8_t *data_array, uint8_t run_command, uint8_t reset_state)
 
 	if (((ds3231_init_status_report() == DS3231_NOT_INITIALIZED) && (reset_state == NO_FORCE_RESET)) || (reset_state == FORCE_RESET))
 	{
-	ds3231_reset(ALL);
-	ds3231_set(TIME, data_array);
+		ds3231_reset(ALL);
+		ds3231_set(TIME, data_array);
 	}
+	
 	ds3231_init_status_update();        /*now the device is initialized (DS3231_INITIALIZED)*/
 	ds3231_run_command(run_command);
 }
@@ -496,34 +611,35 @@ void read_time(void)
 {
 	static uint32_t time;
 	static uint8_t time_read[7];
-	static uint8_t default_time_array[7] = {0, 18, 8, 5, 8, 6, 23};
+	static uint8_t default_time_array[7] = {0, 49, 11, 5, 16, 5, 25};
 
 	ds3231_read(TIME, time_read);
 
 	status.rtc.second = time_read[0];
 	status.rtc.minute = time_read[1];
 
-	if(time_read[2] == 0)
-	{
-		status.rtc.hour = 12;
-		status.rtc.am_pm = 0;
-	}
-	else if((time_read[2] > 0) && (time_read[2] < 12))
-	{
-		status.rtc.hour = time_read[2];
-		status.rtc.am_pm = 0;
-	}
-	else if(time_read[2] == 12)
-	{
-		status.rtc.hour = time_read[2];
-		status.rtc.am_pm = 1;
-	}
-	else if((time_read[2] > 12) && (time_read[2] <= 23))
-	{
-		status.rtc.hour = time_read[2] - 12;
-		status.rtc.am_pm = 1;
-	}
+//	if(time_read[2] == 0)
+//	{
+//		status.rtc.hour = 12;
+//		status.rtc.am_pm = 0;
+//	}
+//	else if((time_read[2] > 0) && (time_read[2] < 12))
+//	{
+//		status.rtc.hour = time_read[2];
+//		status.rtc.am_pm = 0;
+//	}
+//	else if(time_read[2] == 12)
+//	{
+//		status.rtc.hour = time_read[2];
+//		status.rtc.am_pm = 1;
+//	}
+//	else if((time_read[2] > 12) && (time_read[2] <= 23))
+//	{
+//		status.rtc.hour = time_read[2] - 12;
+//		status.rtc.am_pm = 1;
+//	}
 
+	status.rtc.hour = time_read[2];
 	status.rtc.day = time_read[4];
 	status.rtc.month = time_read[5];
 	status.rtc.year = time_read[6];
@@ -538,22 +654,21 @@ void read_time(void)
 	time |= status.rtc.month  << 22;
 	time |= status.rtc.year << 26;
 
-
 	/* If the read time is the same era then it means the RTC has never been started so it can be configured to the default value */
 	if(time == 0)
 		ds3231_init(default_time_array, CLOCK_RUN, NO_FORCE_RESET);
 
-	if(just_once_flag == 0)
-	{
-		just_once_flag = 0; //disabled
+//	if(just_once_flag == 0)
+//	{
+//		just_once_flag = 0; //disabled
+//
+//		if(status.rtc.am_pm == 1) //PM
+//			ESP_LOGI(RTC, "Time %02d:%02d PM  Data %d.%d.%d", status.rtc.hour, status.rtc.minute, status.rtc.day, status.rtc.month, status.rtc.year);
+//		else //AM
+//			ESP_LOGI(RTC, "Time %02d:%02d AM  Data %d.%d.%d", status.rtc.hour, status.rtc.minute, status.rtc.day, status.rtc.month, status.rtc.year);
+//	}
 
-		if(status.rtc.am_pm == 1) //PM
-			ESP_LOGI(RTC, "Time %02d:%02d PM  Data %d.%d.%d", status.rtc.hour, status.rtc.minute, status.rtc.day, status.rtc.month, status.rtc.year);
-		else //AM
-			ESP_LOGI(RTC, "Time %02d:%02d AM  Data %d.%d.%d", status.rtc.hour, status.rtc.minute, status.rtc.day, status.rtc.month, status.rtc.year);
-	}
-
-	//ESP_LOGI(RTC, "%d %d %d %d %d %d %d\r\n", time_read[0], time_read[1], time_read[2], time_read[3], time_read[4], time_read[5], time_read[6]);
+	//ESP_LOGI(RTC, "%d %d %d %d %d %d %d", time_read[0], time_read[1], time_read[2], time_read[3], time_read[4], time_read[5], time_read[6]);
 }
 
 void set_time(uint32_t data)
@@ -583,19 +698,10 @@ void set_time(uint32_t data)
 	time_write[6] = status.rtc.year;
 
 
-//	ESP_LOGI(RTC, "%d %d %d %d %d %d %d\r\n", status.rtc.second, status.rtc.minute, status.rtc.hour, status.rtc.am_pm, status.rtc.day, status.rtc.month, status.rtc.year);
-//	ESP_LOGI(RTC, "%d %d %d %d %d %d %d\r\n", time_write[0], time_write[1], time_write[2], time_write[3], time_write[4], time_write[5], time_write[6]);
-
-
 	ds3231_set(TIME, time_write);
 	vTaskDelay(1000/ portTICK_PERIOD_MS);
 
 	ds3231_read(TIME, time_read);
-
-	if(status.rtc.am_pm == 1) //PM
-		ESP_LOGI(RTC, "Time %02d:%02d PM   Data %d.%d.%d", ((time_read[2] & 0x1F) - 12), time_read[1], time_read[4], time_read[5], time_read[6]);
-	else //AM
-		ESP_LOGI(RTC, "Time %02d:%02d AM   Data %d.%d.%d", (time_read[2] & 0x1F), time_read[1], time_read[4], time_read[5], time_read[6]);
 }
 
 /**
@@ -604,12 +710,19 @@ void set_time(uint32_t data)
  */
 void RTCHandlingTask(void *arg)
 {
+	ESP_LOGI(RTC, "RTCHandlingTask");
+	
 	ds3231_I2C_init();
-	read_time();
-
+	
+	
+	setup_rtc_interrupts();
+	
     while(1)
     {
-    	read_time();
+    	//read_time();
+
+
+    	
     	vTaskDelay(60000/ portTICK_PERIOD_MS); //60s
     }
 }

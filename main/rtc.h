@@ -59,6 +59,8 @@ enum ds3231_registers {
   DS3231_REGISTER_ALARM2_TEMP_LSB
   };
 
+#define RTC_INT_PIN					GPIO_NUM_25
+
 #define I2C_MASTER_SCL_IO           22      			/*!< GPIO number used for I2C master clock */
 #define I2C_MASTER_SDA_IO           21      			/*!< GPIO number used for I2C master data  */
 #define I2C_MASTER_NUM              0                   /*!< I2C master i2c port number, the number of i2c peripheral interfaces available will depend on the chip */
@@ -86,8 +88,8 @@ enum ds3231_registers {
 #define DS3231_BIT_A1M3                       0X07
 #define DS3231_BIT_A1M4                       0X07
 #define DS3231_BIT_A2M2                       0X07
-#define DS3231_BIT_A3M3                       0X07
-#define DS3231_BIT_A4M4                       0X07
+#define DS3231_BIT_A2M3                       0X07
+#define DS3231_BIT_A2M4                       0X07
 #define DS3231_BIT_12_24_ALARM1               0X06
 #define DS3231_BIT_12_24_ALARM2               0X06
 #define DS3231_BIT_DY_DT_ALARM1               0X06
@@ -123,6 +125,51 @@ enum ds3231_registers {
 #define DS3231_REGISTER_CONTROL_DEFAULT                       0X1C
 #define DS3231_REGISTER_CONTROL_STATUS_DEFAULT                0X00
 #define DS3231_REGISTER_AGING_OFFSET_DEFAULT                  0X00
+
+/// Macros to enable/disable 1-second Alarm1 ISR
+#define ENABLE_ONE_SEC_ISR()   do {              \
+    uint8_t _c;                                  \
+    ds3231_read(CONTROL, &_c);                  \
+    _c |= (1 << DS3231_BIT_A1IE);               /* set A1IE */ \
+    ds3231_set(CONTROL, &_c);                   \
+} while(0)
+
+#define DISABLE_ONE_SEC_ISR()  do {              \
+    uint8_t _c;                                  \
+    ds3231_read(CONTROL, &_c);                  \
+    _c &= ~(1 << DS3231_BIT_A1IE);              /* clear A1IE */ \
+    ds3231_set(CONTROL, &_c);                   \
+} while(0)
+
+/// Macros to enable/disable 1-minute Alarm2 ISR
+#define ENABLE_ONE_MIN_ISR()   do {              \
+    uint8_t _c;                                  \
+    ds3231_read(CONTROL, &_c);                  \
+    _c |= (1 << DS3231_BIT_A2IE);               /* set A2IE */ \
+    ds3231_set(CONTROL, &_c);                   \
+} while(0)
+
+#define DISABLE_ONE_MIN_ISR()  do {              \
+    uint8_t _c;                                  \
+    ds3231_read(CONTROL, &_c);                  \
+    _c &= ~(1 << DS3231_BIT_A2IE);              /* clear A2IE */ \
+    ds3231_set(CONTROL, &_c);                   \
+} while(0)
+
+/// Macros to clear the status flags A1F and A2F
+#define CLEAR_ONE_SEC_FLAG()   do {              \
+    uint8_t _s;                                  \
+    ds3231_read(CONTROL_STATUS, &_s);           \
+    _s &= ~(1 << DS3231_BIT_A1F);               /* clear A1F */ \
+    ds3231_set(CONTROL_STATUS, &_s);            \
+} while(0)
+
+#define CLEAR_ONE_MIN_FLAG()   do {              \
+    uint8_t _s;                                  \
+    ds3231_read(CONTROL_STATUS, &_s);           \
+    _s &= ~(1 << DS3231_BIT_A2F);               /* clear A2F */ \
+    ds3231_set(CONTROL_STATUS, &_s);            \
+} while(0)
 
 void RTCHandlingTask(void *arg);
 
