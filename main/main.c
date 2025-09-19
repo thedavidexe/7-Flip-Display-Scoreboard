@@ -35,6 +35,7 @@
 #include "led.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "driver/gpio.h"
 
 //Show dump of entire NVS
 //#define NVS_DATA
@@ -44,6 +45,91 @@ status_t status = {};
 SemaphoreHandle_t xNewDataSemaphore = NULL;
 SemaphoreHandle_t xPeriodicSemaphore = NULL;
 static TaskHandle_t xTimerTaskHandle = NULL;
+static TaskHandle_t xScoreTaskHandle = NULL;
+static QueueHandle_t xScoreQueue = NULL;
+static const char *SCORE_TAG = "SCORE";
+
+// GPIO input to increment score (remote control)
+// Using GPIO32 (RTC-capable). Internal pull-up enabled for active-low.
+#define SCORE_INPUT_PIN     GPIO_NUM_4
+// Which display group to show the score on (0-based)
+#define SCORE_GROUP_INDEX   0
+// Debounce time for mechanical button (ms)
+#define SCORE_DEBOUNCE_MS   50
+
+static volatile uint32_t score_value = 0;
+
+static void IRAM_ATTR score_isr_handler(void* arg)
+{
+    uint32_t evt = 1;
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    if (xScoreQueue) {
+        xQueueSendFromISR(xScoreQueue, &evt, &xHigherPriorityTaskWoken);
+    }
+    if (xHigherPriorityTaskWoken) {
+        portYIELD_FROM_ISR();
+    }
+}
+
+static void init_score_input(void)
+{
+    ESP_LOGI(SCORE_TAG, "Init score input on GPIO%d (pullup=ON, intr=NEGEDGE)", (int)SCORE_INPUT_PIN);
+    gpio_config_t io_conf = {
+        .pin_bit_mask = 1ULL << SCORE_INPUT_PIN,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,    // GPIO32 supports internal pull-up
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_ANYEDGE       // Handle press and release with debounce
+    };
+    gpio_config(&io_conf);
+
+    // Install ISR service if not already installed elsewhere
+    esp_err_t r = gpio_install_isr_service(0);
+    if (r != ESP_OK && r != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(FIRM, "gpio_install_isr_service failed: %s", esp_err_to_name(r));
+    }
+    else if (r == ESP_OK) {
+        ESP_LOGI(SCORE_TAG, "GPIO ISR service installed");
+    } else {
+        ESP_LOGI(SCORE_TAG, "GPIO ISR service already installed");
+    }
+    gpio_isr_handler_add(SCORE_INPUT_PIN, score_isr_handler, NULL);
+    ESP_LOGI(SCORE_TAG, "ISR handler attached to GPIO%d", (int)SCORE_INPUT_PIN);
+}
+
+static void vScoreTask(void *arg)
+{
+    uint32_t dummy;
+    // Initialize display with current score
+    DisplayNumber(score_value, SCORE_GROUP_INDEX);
+    ESP_LOGI(SCORE_TAG, "Score task started (group=%d, initial=%u)", SCORE_GROUP_INDEX, (unsigned)score_value);
+    bool pressed = false; // latched logical state
+    int stable_level = gpio_get_level(SCORE_INPUT_PIN);
+    pressed = (stable_level == 0);
+    for(;;) {
+        if (xQueueReceive(xScoreQueue, &dummy, portMAX_DELAY) == pdTRUE) {
+            // Sample level, wait debounce, sample again
+            int l1 = gpio_get_level(SCORE_INPUT_PIN);
+            vTaskDelay(pdMS_TO_TICKS(SCORE_DEBOUNCE_MS));
+            int l2 = gpio_get_level(SCORE_INPUT_PIN);
+
+            if (l1 == l2 && l2 != stable_level) {
+                // Stable change detected
+                stable_level = l2;
+                if (stable_level == 0 && !pressed) {
+                    // Confirmed press
+                    pressed = true;
+                    score_value++;
+                    DisplayNumber(score_value, SCORE_GROUP_INDEX);
+                    ESP_LOGI(SCORE_TAG, "Score press -> %u", (unsigned)score_value);
+                } else if (stable_level == 1 && pressed) {
+                    // Confirmed release
+                    pressed = false;
+                }
+            }
+        }
+    }
+}
 
 void vDataProcessingTask(void *arg);
 void vClockModeHandlingTask(void *arg);
@@ -97,16 +183,16 @@ void app_main(void)
 {
 	ESP_LOGI(FIRM, "Version: 0.1.1");
 	
-    /* Start all tasks */
-    xTaskCreate(vDataProcessingTask, "vDataProcessingTask", 4096, NULL, 6, NULL);
-    xTaskCreate(vClockModeHandlingTask, "vClockModeHandlingTask", 4096, NULL, 5, NULL);
-    xTaskCreate(vTimerModeHandlingTask, "vTimerModeHandlingTask", 4096, NULL, 4, NULL);
-    vTaskDelay(10/ portTICK_PERIOD_MS);
+    // /* Start all tasks */
+    // xTaskCreate(vDataProcessingTask, "vDataProcessingTask", 4096, NULL, 6, NULL);
+    // xTaskCreate(vClockModeHandlingTask, "vClockModeHandlingTask", 4096, NULL, 5, NULL);
+    // xTaskCreate(vTimerModeHandlingTask, "vTimerModeHandlingTask", 4096, NULL, 4, NULL);
+    // vTaskDelay(10/ portTICK_PERIOD_MS);
     
-    xTaskCreate(RestfulServerTask, "RestfulServerTask", 4048, NULL, 10, NULL);
-    xTaskCreate(mqtt_task, "MqttTask", 4096, NULL, 7, NULL);
-    xTaskCreate(RTCHandlingTask, "RTCHandlingTask", 4096, NULL, 3, NULL);
-    xTaskCreate(vLED_HandleTask, "vLED_HandleTask", 2096, NULL, 1, NULL);
+    // xTaskCreate(RestfulServerTask, "RestfulServerTask", 4048, NULL, 10, NULL);
+    // xTaskCreate(mqtt_task, "MqttTask", 4096, NULL, 7, NULL);
+    // xTaskCreate(RTCHandlingTask, "RTCHandlingTask", 4096, NULL, 3, NULL);
+    // xTaskCreate(vLED_HandleTask, "vLED_HandleTask", 2096, NULL, 1, NULL);
 
 #ifdef NVS_DATA    
     print_nvs_stats();
@@ -152,8 +238,19 @@ void app_main(void)
 	
 	show_config();
 	
-	LED_set_color(YELLOW, 1);
-	
+    LED_set_color(YELLOW, 1);
+
+    // Setup score input and task
+    xScoreQueue = xQueueCreate(10, sizeof(uint32_t));
+    if (xScoreQueue != NULL) {
+        ESP_LOGI(SCORE_TAG, "Score queue created");
+        init_score_input();
+        xTaskCreate(vScoreTask, "vScoreTask", 2048, NULL, 8, &xScoreTaskHandle);
+        ESP_LOGI(SCORE_TAG, "Score task created");
+    } else {
+        ESP_LOGE(FIRM, "Failed to create score queue");
+    }
+    
     vTaskDelete(NULL);
 }
 
