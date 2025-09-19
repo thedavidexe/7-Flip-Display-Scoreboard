@@ -503,6 +503,7 @@ void DisplaySymbol(uint8_t pattern_raw, uint8_t target)
 
             // Enable power and send pulse
             gpio_set_level(POWER_PIN, 1);
+            vTaskDelay(5 / portTICK_PERIOD_MS);
             shift_register_send_chain(chain, total);
             // Wait for actuator movement
             vTaskDelay(100 / portTICK_PERIOD_MS);
