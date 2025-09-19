@@ -45,37 +45,57 @@ status_t status = {};
 SemaphoreHandle_t xNewDataSemaphore = NULL;
 SemaphoreHandle_t xPeriodicSemaphore = NULL;
 static TaskHandle_t xTimerTaskHandle = NULL;
-static TaskHandle_t xScoreTaskHandle = NULL;
-static QueueHandle_t xScoreQueue = NULL;
-static const char *SCORE_TAG = "SCORE";
+static TaskHandle_t xScoreATaskHandle = NULL;
+static QueueHandle_t xScoreAQueue = NULL;
+static const char *SCOREA_TAG = "SCORE_A";
+static TaskHandle_t xScoreBTaskHandle = NULL;
+static QueueHandle_t xScoreBQueue = NULL;
+static const char *SCOREB_TAG = "SCORE_B";
 
-// GPIO input to increment score (remote control)
+// Player A input to increment score (remote control)
 // Using GPIO32 (RTC-capable). Internal pull-up enabled for active-low.
-#define SCORE_INPUT_PIN     GPIO_NUM_4
+#define SCORE_A_INPUT_PIN     GPIO_NUM_32
 // Which display group to show the score on (0-based)
-#define SCORE_GROUP_INDEX   0
+#define SCORE_A_GROUP_INDEX   0
 // Debounce time for mechanical button (ms)
 #define SCORE_DEBOUNCE_MS   50
 
-static volatile uint32_t score_value = 0;
+// Player B input on GPIO4
+#define SCORE_B_INPUT_PIN   GPIO_NUM_4
+#define SCORE_B_GROUP_INDEX 1
 
-static void IRAM_ATTR score_isr_handler(void* arg)
+static volatile uint32_t score_value_a = 0;
+static volatile uint32_t score_value_b = 0;
+
+static void IRAM_ATTR score_a_isr_handler(void* arg)
 {
     uint32_t evt = 1;
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    if (xScoreQueue) {
-        xQueueSendFromISR(xScoreQueue, &evt, &xHigherPriorityTaskWoken);
+    if (xScoreAQueue) {
+        xQueueSendFromISR(xScoreAQueue, &evt, &xHigherPriorityTaskWoken);
     }
     if (xHigherPriorityTaskWoken) {
         portYIELD_FROM_ISR();
     }
 }
 
-static void init_score_input(void)
+static void IRAM_ATTR score_b_isr_handler(void* arg)
 {
-    ESP_LOGI(SCORE_TAG, "Init score input on GPIO%d (pullup=ON, intr=NEGEDGE)", (int)SCORE_INPUT_PIN);
+    uint32_t evt = 1;
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    if (xScoreBQueue) {
+        xQueueSendFromISR(xScoreBQueue, &evt, &xHigherPriorityTaskWoken);
+    }
+    if (xHigherPriorityTaskWoken) {
+        portYIELD_FROM_ISR();
+    }
+}
+
+static void init_score_a_input(void)
+{
+    ESP_LOGI(SCOREA_TAG, "Init score A input on GPIO%d (pullup=ON, intr=ANYEDGE)", (int)SCORE_A_INPUT_PIN);
     gpio_config_t io_conf = {
-        .pin_bit_mask = 1ULL << SCORE_INPUT_PIN,
+        .pin_bit_mask = 1ULL << SCORE_A_INPUT_PIN,
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,    // GPIO32 supports internal pull-up
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -89,29 +109,29 @@ static void init_score_input(void)
         ESP_LOGE(FIRM, "gpio_install_isr_service failed: %s", esp_err_to_name(r));
     }
     else if (r == ESP_OK) {
-        ESP_LOGI(SCORE_TAG, "GPIO ISR service installed");
+        ESP_LOGI(SCOREA_TAG, "GPIO ISR service installed");
     } else {
-        ESP_LOGI(SCORE_TAG, "GPIO ISR service already installed");
+        ESP_LOGI(SCOREA_TAG, "GPIO ISR service already installed");
     }
-    gpio_isr_handler_add(SCORE_INPUT_PIN, score_isr_handler, NULL);
-    ESP_LOGI(SCORE_TAG, "ISR handler attached to GPIO%d", (int)SCORE_INPUT_PIN);
+    gpio_isr_handler_add(SCORE_A_INPUT_PIN, score_a_isr_handler, NULL);
+    ESP_LOGI(SCOREA_TAG, "ISR handler attached to GPIO%d", (int)SCORE_A_INPUT_PIN);
 }
 
-static void vScoreTask(void *arg)
+static void vScoreATask(void *arg)
 {
     uint32_t dummy;
     // Initialize display with current score
-    DisplayNumber(score_value, SCORE_GROUP_INDEX);
-    ESP_LOGI(SCORE_TAG, "Score task started (group=%d, initial=%u)", SCORE_GROUP_INDEX, (unsigned)score_value);
+    DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
+    ESP_LOGI(SCOREA_TAG, "Score A task started (group=%d, initial=%u)", SCORE_A_GROUP_INDEX, (unsigned)score_value_a);
     bool pressed = false; // latched logical state
-    int stable_level = gpio_get_level(SCORE_INPUT_PIN);
+    int stable_level = gpio_get_level(SCORE_A_INPUT_PIN);
     pressed = (stable_level == 0);
     for(;;) {
-        if (xQueueReceive(xScoreQueue, &dummy, portMAX_DELAY) == pdTRUE) {
+        if (xQueueReceive(xScoreAQueue, &dummy, portMAX_DELAY) == pdTRUE) {
             // Sample level, wait debounce, sample again
-            int l1 = gpio_get_level(SCORE_INPUT_PIN);
+            int l1 = gpio_get_level(SCORE_A_INPUT_PIN);
             vTaskDelay(pdMS_TO_TICKS(SCORE_DEBOUNCE_MS));
-            int l2 = gpio_get_level(SCORE_INPUT_PIN);
+            int l2 = gpio_get_level(SCORE_A_INPUT_PIN);
 
             if (l1 == l2 && l2 != stable_level) {
                 // Stable change detected
@@ -119,11 +139,62 @@ static void vScoreTask(void *arg)
                 if (stable_level == 0 && !pressed) {
                     // Confirmed press
                     pressed = true;
-                    score_value++;
-                    DisplayNumber(score_value, SCORE_GROUP_INDEX);
-                    ESP_LOGI(SCORE_TAG, "Score press -> %u", (unsigned)score_value);
+                    score_value_a++;
+                    DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
+                    ESP_LOGI(SCOREA_TAG, "Score A press -> %u", (unsigned)score_value_a);
                 } else if (stable_level == 1 && pressed) {
                     // Confirmed release
+                    pressed = false;
+                }
+            }
+        }
+    }
+}
+
+static void init_score_b_input(void)
+{
+    ESP_LOGI(SCOREB_TAG, "Init score B input on GPIO%d (pullup=ON, intr=ANYEDGE)", (int)SCORE_B_INPUT_PIN);
+    gpio_config_t io_conf = {
+        .pin_bit_mask = 1ULL << SCORE_B_INPUT_PIN,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_ANYEDGE
+    };
+    gpio_config(&io_conf);
+
+    // ISR service should already be installed by init_score_a_input(); tolerate duplicates
+    esp_err_t r = gpio_install_isr_service(0);
+    if (r != ESP_OK && r != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(FIRM, "gpio_install_isr_service (B) failed: %s", esp_err_to_name(r));
+    }
+    gpio_isr_handler_add(SCORE_B_INPUT_PIN, score_b_isr_handler, NULL);
+    ESP_LOGI(SCOREB_TAG, "ISR handler attached to GPIO%d", (int)SCORE_B_INPUT_PIN);
+}
+
+static void vScoreBTask(void *arg)
+{
+    uint32_t dummy;
+    // Initialize display for B with current score
+    DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
+    ESP_LOGI(SCOREB_TAG, "Score B task started (group=%d, initial=%u)", SCORE_B_GROUP_INDEX, (unsigned)score_value_b);
+    bool pressed = false; // latched logical state
+    int stable_level = gpio_get_level(SCORE_B_INPUT_PIN);
+    pressed = (stable_level == 0);
+    for(;;) {
+        if (xQueueReceive(xScoreBQueue, &dummy, portMAX_DELAY) == pdTRUE) {
+            int l1 = gpio_get_level(SCORE_B_INPUT_PIN);
+            vTaskDelay(pdMS_TO_TICKS(SCORE_DEBOUNCE_MS));
+            int l2 = gpio_get_level(SCORE_B_INPUT_PIN);
+
+            if (l1 == l2 && l2 != stable_level) {
+                stable_level = l2;
+                if (stable_level == 0 && !pressed) {
+                    pressed = true;
+                    score_value_b++;
+                    DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
+                    ESP_LOGI(SCOREB_TAG, "Score B press -> %u", (unsigned)score_value_b);
+                } else if (stable_level == 1 && pressed) {
                     pressed = false;
                 }
             }
@@ -135,6 +206,46 @@ void vDataProcessingTask(void *arg);
 void vClockModeHandlingTask(void *arg);
 void vTimerModeHandlingTask(void *arg);
 
+// Force two groups: [0..1] and [2..3]
+static void hardcode_two_groups_01_and_23(void)
+{
+    if (status.display_number >= 4) {
+        status.total_groups = 2;
+
+        status.groups[0].start_position = 0;
+        status.groups[0].end_position   = 1;
+        status.groups[0].separator      = SEP_NULL;
+        status.groups[0].mode           = MODE_NONE;
+
+        status.groups[1].start_position = 2;
+        status.groups[1].end_position   = 3;
+        status.groups[1].separator      = SEP_NULL;
+        status.groups[1].mode           = MODE_NONE;
+
+        for (int i = 0; i < MAX_DISPLAYS; i++) {
+            status.groups[0].pattern[i] = 0;
+            status.groups[1].pattern[i] = 0;
+        }
+
+        ESP_LOGI(CONFIG_TAG, "Hardcoded groups: [0-1] and [2-3]");
+    } else if (status.display_number >= 2) {
+        status.total_groups = 1;
+        status.groups[0].start_position = 0;
+        status.groups[0].end_position   = 1;
+        status.groups[0].separator      = SEP_NULL;
+        status.groups[0].mode           = MODE_NONE;
+        for (int i = 0; i < MAX_DISPLAYS; i++) status.groups[0].pattern[i] = 0;
+        ESP_LOGI(CONFIG_TAG, "Hardcoded single group: [0-1] (only %u displays present)", status.display_number);
+    } else {
+        status.total_groups = 1;
+        status.groups[0].start_position = 0;
+        status.groups[0].end_position   = status.display_number ? (status.display_number - 1) : 0;
+        status.groups[0].separator      = SEP_NULL;
+        status.groups[0].mode           = MODE_NONE;
+        for (int i = 0; i < MAX_DISPLAYS; i++) status.groups[0].pattern[i] = 0;
+        ESP_LOGI(CONFIG_TAG, "Hardcoded minimal group: [0-%u]", status.groups[0].end_position);
+    }
+}
 
 #ifdef NVS_DATA
 void print_nvs_stats(void)
@@ -234,21 +345,37 @@ void app_main(void)
 	    load_config_from_nvs();
 	}
 	
-	status.display_symbol_mode = SINGLE_MODUL;
+    status.display_symbol_mode = SINGLE_MODUL;
+
+    // Hardcode groups: Group 0 = displays 0..1, Group 1 = displays 2..3
+    hardcode_two_groups_01_and_23();
+    // // Optional: persist to NVS so web UI reflects the hardcoded groups
+    // save_config_to_nvs();
 	
 	show_config();
 	
     LED_set_color(YELLOW, 1);
 
-    // Setup score input and task
-    xScoreQueue = xQueueCreate(10, sizeof(uint32_t));
-    if (xScoreQueue != NULL) {
-        ESP_LOGI(SCORE_TAG, "Score queue created");
-        init_score_input();
-        xTaskCreate(vScoreTask, "vScoreTask", 2048, NULL, 8, &xScoreTaskHandle);
-        ESP_LOGI(SCORE_TAG, "Score task created");
+    // Setup score A input and task
+    xScoreAQueue = xQueueCreate(10, sizeof(uint32_t));
+    if (xScoreAQueue != NULL) {
+        ESP_LOGI(SCOREA_TAG, "Score A queue created");
+        init_score_a_input();
+        xTaskCreate(vScoreATask, "vScoreATask", 2048, NULL, 8, &xScoreATaskHandle);
+        ESP_LOGI(SCOREA_TAG, "Score A task created");
     } else {
-        ESP_LOGE(FIRM, "Failed to create score queue");
+        ESP_LOGE(FIRM, "Failed to create score A queue");
+    }
+
+    // Setup score B input and task
+    xScoreBQueue = xQueueCreate(10, sizeof(uint32_t));
+    if (xScoreBQueue != NULL) {
+        ESP_LOGI(SCOREB_TAG, "Score B queue created");
+        init_score_b_input();
+        xTaskCreate(vScoreBTask, "vScoreBTask", 2048, NULL, 8, &xScoreBTaskHandle);
+        ESP_LOGI(SCOREB_TAG, "Score B task created");
+    } else {
+        ESP_LOGE(FIRM, "Failed to create score B queue");
     }
     
     vTaskDelete(NULL);
