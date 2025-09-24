@@ -121,12 +121,12 @@ static void vScoreATask(void *arg)
 {
     uint32_t dummy;
     // Initialize display with current score
-	vTaskDelay(250 / portTICK_PERIOD_MS);
+	vTaskDelay(250 / portTICK_PERIOD_MS);  // this allows the other score to init first to avoid updating too many displays at once
     DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
     ESP_LOGI(SCOREA_TAG, "Score A task started (group=%d, initial=%u)", SCORE_A_GROUP_INDEX, (unsigned)score_value_a);
     bool pressed = false; // latched logical state
     int stable_level = gpio_get_level(SCORE_A_INPUT_PIN);
-    pressed = (stable_level == 0);
+    pressed = (stable_level == 1);
     for(;;) {
         if (xQueueReceive(xScoreAQueue, &dummy, portMAX_DELAY) == pdTRUE) {
             // Sample level, wait debounce, sample again
@@ -137,15 +137,15 @@ static void vScoreATask(void *arg)
             if (l1 == l2 && l2 != stable_level) {
                 // Stable change detected
                 stable_level = l2;
-                if (stable_level == 0 && !pressed) {
-                    // Confirmed press
-                    pressed = true;
+                if (stable_level == 0 && pressed) {
+                    // from pressed to released, increment score
+                    pressed = false;
                     score_value_a++;
                     DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
                     ESP_LOGI(SCOREA_TAG, "Score A press -> %u", (unsigned)score_value_a);
-                } else if (stable_level == 1 && pressed) {
-                    // Confirmed release
-                    pressed = false;
+                } else if (stable_level == 1 && !pressed) {
+                    // Confirmed pressed
+                    pressed = true;
                 }
             }
         }
@@ -179,24 +179,28 @@ static void vScoreBTask(void *arg)
     // Initialize display for B with current score
     DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
     ESP_LOGI(SCOREB_TAG, "Score B task started (group=%d, initial=%u)", SCORE_B_GROUP_INDEX, (unsigned)score_value_b);
-    bool pressed = false; // latched logical state
+    bool pressed = false; 
     int stable_level = gpio_get_level(SCORE_B_INPUT_PIN);
-    pressed = (stable_level == 0);
+    pressed = (stable_level == 1);
     for(;;) {
         if (xQueueReceive(xScoreBQueue, &dummy, portMAX_DELAY) == pdTRUE) {
             int l1 = gpio_get_level(SCORE_B_INPUT_PIN);
             vTaskDelay(pdMS_TO_TICKS(SCORE_DEBOUNCE_MS));
             int l2 = gpio_get_level(SCORE_B_INPUT_PIN);
+            ESP_LOGI(SCOREB_TAG, "l1: %u", (unsigned)l2);
+            ESP_LOGI(SCOREB_TAG, "l2: %u", (unsigned)l2);
 
             if (l1 == l2 && l2 != stable_level) {
                 stable_level = l2;
-                if (stable_level == 0 && !pressed) {
-                    pressed = true;
+                if (stable_level == 0 && pressed) {
+                    // just now released
+                    pressed = false;
                     score_value_b++;
                     DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
                     ESP_LOGI(SCOREB_TAG, "Score B press -> %u", (unsigned)score_value_b);
-                } else if (stable_level == 1 && pressed) {
-                    pressed = false;
+                } else if (stable_level == 1 && !pressed) {
+                    // just now pressed
+                    pressed = true;
                 }
             }
         }
@@ -358,7 +362,7 @@ void app_main(void)
     LED_set_color(YELLOW, 1);
 
     // Setup score A input and task
-    xScoreAQueue = xQueueCreate(10, sizeof(uint32_t));
+    xScoreAQueue = xQueueCreate(1, sizeof(uint32_t));
     if (xScoreAQueue != NULL) {
         ESP_LOGI(SCOREA_TAG, "Score A queue created");
         init_score_a_input();
@@ -369,7 +373,7 @@ void app_main(void)
     }
 
     // Setup score B input and task
-    xScoreBQueue = xQueueCreate(10, sizeof(uint32_t));
+    xScoreBQueue = xQueueCreate(1, sizeof(uint32_t));
     if (xScoreBQueue != NULL) {
         ESP_LOGI(SCOREB_TAG, "Score B queue created");
         init_score_b_input();
