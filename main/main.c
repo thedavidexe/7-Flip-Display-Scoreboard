@@ -50,19 +50,23 @@ static TaskHandle_t xScoreATaskHandle = NULL;
 static QueueHandle_t xScoreAQueue = NULL;
 static const char *SCOREA_TAG = "SCORE_A";
 static TimerHandle_t xScoreAHoldTimer = NULL;
+static TimerHandle_t xScoreAResetTimer = NULL;
 
 enum {
     SCORE_A_EVENT_EDGE = 1,
-    SCORE_A_EVENT_HOLD = 2
+    SCORE_A_EVENT_HOLD = 2,
+    SCORE_A_EVENT_RESET = 3
 };
 static TaskHandle_t xScoreBTaskHandle = NULL;
 static QueueHandle_t xScoreBQueue = NULL;
 static const char *SCOREB_TAG = "SCORE_B";
 static TimerHandle_t xScoreBHoldTimer = NULL;
+static TimerHandle_t xScoreBResetTimer = NULL;
 
 enum {
     SCORE_B_EVENT_EDGE = 1,
-    SCORE_B_EVENT_HOLD = 2
+    SCORE_B_EVENT_HOLD = 2,
+    SCORE_B_EVENT_RESET = 3
 };
 
 // Player A input to increment score (remote control)
@@ -105,6 +109,19 @@ static void score_a_hold_timer_callback(TimerHandle_t xTimer)
     }
 }
 
+static void score_a_reset_timer_callback(TimerHandle_t xTimer)
+{
+    (void)xTimer;
+    if (!xScoreAQueue) {
+        return;
+    }
+
+    const uint32_t reset_evt = SCORE_A_EVENT_RESET;
+    if (xQueueSend(xScoreAQueue, &reset_evt, 0) != pdPASS) {
+        ESP_LOGW(SCOREA_TAG, "Reset event queue full");
+    }
+}
+
 static void IRAM_ATTR score_b_isr_handler(void* arg)
 {
     const uint32_t evt = SCORE_B_EVENT_EDGE;
@@ -127,6 +144,19 @@ static void score_b_hold_timer_callback(TimerHandle_t xTimer)
     const uint32_t hold_evt = SCORE_B_EVENT_HOLD;
     if (xQueueSend(xScoreBQueue, &hold_evt, 0) != pdPASS) {
         ESP_LOGW(SCOREB_TAG, "Hold event queue full");
+    }
+}
+
+static void score_b_reset_timer_callback(TimerHandle_t xTimer)
+{
+    (void)xTimer;
+    if (!xScoreBQueue) {
+        return;
+    }
+
+    const uint32_t reset_evt = SCORE_B_EVENT_RESET;
+    if (xQueueSend(xScoreBQueue, &reset_evt, 0) != pdPASS) {
+        ESP_LOGW(SCOREB_TAG, "Reset event queue full");
     }
 }
 
@@ -167,6 +197,7 @@ static void vScoreATask(void *arg)
     int stable_level = gpio_get_level(SCORE_A_INPUT_PIN);
     pressed = (stable_level == 1);
     bool hold_decremented = false;
+    bool hold_reset = false;
     for(;;) {
         if (xQueueReceive(xScoreAQueue, &evt, portMAX_DELAY) == pdTRUE) {
             if (evt == SCORE_A_EVENT_EDGE) {
@@ -186,17 +217,24 @@ static void vScoreATask(void *arg)
                                 ESP_LOGW(SCOREA_TAG, "Failed to stop hold timer on release");
                             }
                         }
-                        if (!hold_decremented) {
+                        if (xScoreAResetTimer && xTimerIsTimerActive(xScoreAResetTimer) != pdFALSE) {
+                            if (xTimerStop(xScoreAResetTimer, 0) != pdPASS) {
+                                ESP_LOGW(SCOREA_TAG, "Failed to stop reset timer on release");
+                            }
+                        }
+                        if (!hold_decremented && !hold_reset) {
                             score_value_a++;
                             DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
                             ESP_LOGI(SCOREA_TAG, "Score A increment on release -> %u", (unsigned)score_value_a);
                         } else {
                             hold_decremented = false;
+                            hold_reset = false;
                         }
                     } else if (stable_level == 1 && !pressed) {
                         // Confirmed pressed
                         pressed = true;
                         hold_decremented = false;
+                        hold_reset = false;
                         if (xScoreAHoldTimer) {
                             if (xTimerIsTimerActive(xScoreAHoldTimer) != pdFALSE) {
                                 if (xTimerStop(xScoreAHoldTimer, 0) != pdPASS) {
@@ -205,6 +243,16 @@ static void vScoreATask(void *arg)
                             }
                             if (xTimerStart(xScoreAHoldTimer, 0) != pdPASS) {
                                 ESP_LOGW(SCOREA_TAG, "Failed to start hold timer");
+                            }
+                        }
+                        if (xScoreAResetTimer) {
+                            if (xTimerIsTimerActive(xScoreAResetTimer) != pdFALSE) {
+                                if (xTimerStop(xScoreAResetTimer, 0) != pdPASS) {
+                                    ESP_LOGW(SCOREA_TAG, "Failed to stop reset timer before restart");
+                                }
+                            }
+                            if (xTimerStart(xScoreAResetTimer, 0) != pdPASS) {
+                                ESP_LOGW(SCOREA_TAG, "Failed to start reset timer");
                             }
                         }
                     }
@@ -223,6 +271,19 @@ static void vScoreATask(void *arg)
                         if (decremented) {
                             hold_decremented = true;
                         }
+                    }
+                }
+            } else if (evt == SCORE_A_EVENT_RESET) {
+                if (pressed && !hold_reset) {
+                    int level = gpio_get_level(SCORE_A_INPUT_PIN);
+                    if (level == 1) {
+                        score_value_a = 0;
+                        score_value_b = 0;
+                        DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
+                        DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
+                        ESP_LOGI(SCOREA_TAG, "Scores reset to 0 after 5s hold");
+                        hold_reset = true;
+                        hold_decremented = true;
                     }
                 }
             }
@@ -261,6 +322,7 @@ static void vScoreBTask(void *arg)
     int stable_level = gpio_get_level(SCORE_B_INPUT_PIN);
     pressed = (stable_level == 1);
     bool hold_decremented = false;
+    bool hold_reset = false;
     for(;;) {
         if (xQueueReceive(xScoreBQueue, &evt, portMAX_DELAY) == pdTRUE) {
             if (evt == SCORE_B_EVENT_EDGE) {
@@ -278,17 +340,24 @@ static void vScoreBTask(void *arg)
                                 ESP_LOGW(SCOREB_TAG, "Failed to stop hold timer on release");
                             }
                         }
-                        if (!hold_decremented) {
+                        if (xScoreBResetTimer && xTimerIsTimerActive(xScoreBResetTimer) != pdFALSE) {
+                            if (xTimerStop(xScoreBResetTimer, 0) != pdPASS) {
+                                ESP_LOGW(SCOREB_TAG, "Failed to stop reset timer on release");
+                            }
+                        }
+                        if (!hold_decremented && !hold_reset) {
                             score_value_b++;
                             DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
                             ESP_LOGI(SCOREB_TAG, "Score B increment on release -> %u", (unsigned)score_value_b);
                         } else {
                             hold_decremented = false;
+                            hold_reset = false;
                         }
                     } else if (stable_level == 1 && !pressed) {
                         // just now pressed
                         pressed = true;
                         hold_decremented = false;
+                        hold_reset = false;
                         if (xScoreBHoldTimer) {
                             if (xTimerIsTimerActive(xScoreBHoldTimer) != pdFALSE) {
                                 if (xTimerStop(xScoreBHoldTimer, 0) != pdPASS) {
@@ -297,6 +366,16 @@ static void vScoreBTask(void *arg)
                             }
                             if (xTimerStart(xScoreBHoldTimer, 0) != pdPASS) {
                                 ESP_LOGW(SCOREB_TAG, "Failed to start hold timer");
+                            }
+                        }
+                        if (xScoreBResetTimer) {
+                            if (xTimerIsTimerActive(xScoreBResetTimer) != pdFALSE) {
+                                if (xTimerStop(xScoreBResetTimer, 0) != pdPASS) {
+                                    ESP_LOGW(SCOREB_TAG, "Failed to stop reset timer before restart");
+                                }
+                            }
+                            if (xTimerStart(xScoreBResetTimer, 0) != pdPASS) {
+                                ESP_LOGW(SCOREB_TAG, "Failed to start reset timer");
                             }
                         }
                     }
@@ -315,6 +394,19 @@ static void vScoreBTask(void *arg)
                         if (decremented) {
                             hold_decremented = true;
                         }
+                    }
+                }
+            } else if (evt == SCORE_B_EVENT_RESET) {
+                if (pressed && !hold_reset) {
+                    int level = gpio_get_level(SCORE_B_INPUT_PIN);
+                    if (level == 1) {
+                        score_value_a = 0;
+                        score_value_b = 0;
+                        DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
+                        DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
+                        ESP_LOGI(SCOREB_TAG, "Scores reset to 0 after 5s hold");
+                        hold_reset = true;
+                        hold_decremented = true;
                     }
                 }
             }
@@ -485,6 +577,10 @@ void app_main(void)
         if (xScoreAHoldTimer == NULL) {
             ESP_LOGE(SCOREA_TAG, "Failed to create hold timer");
         }
+        xScoreAResetTimer = xTimerCreate("ScoreAReset", pdMS_TO_TICKS(5000), pdFALSE, NULL, score_a_reset_timer_callback);
+        if (xScoreAResetTimer == NULL) {
+            ESP_LOGE(SCOREA_TAG, "Failed to create reset timer");
+        }
         xTaskCreate(vScoreATask, "vScoreATask", 2048, NULL, 8, &xScoreATaskHandle);
         ESP_LOGI(SCOREA_TAG, "Score A task created");
     } else {
@@ -499,6 +595,10 @@ void app_main(void)
         xScoreBHoldTimer = xTimerCreate("ScoreBHold", pdMS_TO_TICKS(2000), pdFALSE, NULL, score_b_hold_timer_callback);
         if (xScoreBHoldTimer == NULL) {
             ESP_LOGE(SCOREB_TAG, "Failed to create hold timer");
+        }
+        xScoreBResetTimer = xTimerCreate("ScoreBReset", pdMS_TO_TICKS(5000), pdFALSE, NULL, score_b_reset_timer_callback);
+        if (xScoreBResetTimer == NULL) {
+            ESP_LOGE(SCOREB_TAG, "Failed to create reset timer");
         }
         xTaskCreate(vScoreBTask, "vScoreBTask", 2048, NULL, 8, &xScoreBTaskHandle);
         ESP_LOGI(SCOREB_TAG, "Score B task created");
