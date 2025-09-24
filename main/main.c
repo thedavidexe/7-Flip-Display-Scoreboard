@@ -127,10 +127,6 @@ static void vScoreATask(void *arg)
     bool pressed = false; // latched logical state
     int stable_level = gpio_get_level(SCORE_A_INPUT_PIN);
     pressed = (stable_level == 1);
-    TickType_t press_start_tick = 0;
-    if (pressed) {
-        press_start_tick = xTaskGetTickCount();
-    }
     for(;;) {
         if (xQueueReceive(xScoreAQueue, &dummy, portMAX_DELAY) == pdTRUE) {
             // Sample level, wait debounce, sample again
@@ -144,21 +140,12 @@ static void vScoreATask(void *arg)
                 if (stable_level == 0 && pressed) {
                     // from pressed to released, increment score
                     pressed = false;
-                    if (press_start_tick != 0) {
-                        TickType_t press_duration_ticks = xTaskGetTickCount() - press_start_tick;
-                        uint32_t press_duration_ms = press_duration_ticks * portTICK_PERIOD_MS;
-                        if (press_duration_ms >= 2000) {
-                            ESP_LOGI(SCOREA_TAG, "Score A remote held for %u ms", (unsigned)press_duration_ms);
-                        }
-                        press_start_tick = 0;
-                    }
                     score_value_a++;
                     DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
                     ESP_LOGI(SCOREA_TAG, "Score A increment on release -> %u", (unsigned)score_value_a);
                 } else if (stable_level == 1 && !pressed) {
                     // Confirmed pressed
                     pressed = true;
-                    press_start_tick = xTaskGetTickCount();
                 }
             }
         }
