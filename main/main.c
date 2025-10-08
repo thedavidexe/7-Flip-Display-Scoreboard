@@ -160,6 +160,14 @@ static void score_b_reset_timer_callback(TimerHandle_t xTimer)
     }
 }
 
+static void clear_all_disp_state(void)
+{
+    for (uint8_t i = 0; i < 4; i++) {
+        status.current_pattern[i] = 0;
+    }
+
+}
+
 static void init_score_a_input(void)
 {
     ESP_LOGI(SCOREA_TAG, "Init score A input on GPIO%d (pullup=ON, intr=ANYEDGE)", (int)SCORE_A_INPUT_PIN);
@@ -267,8 +275,7 @@ static void vScoreATask(void *arg)
                             decremented = true;
                         }
                         // clear current display state so all coils fire in case they got jumbled
-                        status.current_pattern[SCORE_A_GROUP_INDEX] = 0;
-                        status.current_pattern[SCORE_B_GROUP_INDEX] = 0;
+                        clear_all_disp_state();
                         DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
                         ESP_LOGI(SCOREA_TAG, "Score A decrement on hold -> %u", (unsigned)score_value_a);
                         if (decremented) {
@@ -283,9 +290,9 @@ static void vScoreATask(void *arg)
                         score_value_a = 0;
                         score_value_b = 0;
                         // clear current display state so all coils fire in case they got jumbled
-                        status.current_pattern[SCORE_A_GROUP_INDEX] = 0;
-                        status.current_pattern[SCORE_B_GROUP_INDEX] = 0;
+                        clear_all_disp_state();
                         DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
+                        vTaskDelay(pdMS_TO_TICKS(250));
                         DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
                         ESP_LOGI(SCOREA_TAG, "Scores reset to 0 after 5s hold");
                         hold_reset = true;
@@ -396,8 +403,7 @@ static void vScoreBTask(void *arg)
                             decremented = true;
                         }
                         // clear current display state so all coils fire in case they got jumbled
-                        status.current_pattern[SCORE_A_GROUP_INDEX] = 0;
-                        status.current_pattern[SCORE_B_GROUP_INDEX] = 0;
+                        clear_all_disp_state();
                         DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
                         ESP_LOGI(SCOREB_TAG, "Score B decrement on hold -> %u", (unsigned)score_value_b);
                         if (decremented) {
@@ -410,11 +416,11 @@ static void vScoreBTask(void *arg)
                     int level = gpio_get_level(SCORE_B_INPUT_PIN);
                     if (level == 1) {
                         // clear current display state so all coils fire in case they got jumbled
-                        status.current_pattern[SCORE_A_GROUP_INDEX] = 0;
-                        status.current_pattern[SCORE_B_GROUP_INDEX] = 0;
+                        clear_all_disp_state();
                         score_value_a = 0;
                         score_value_b = 0;
                         DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
+                        vTaskDelay(pdMS_TO_TICKS(250));
                         DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
                         ESP_LOGI(SCOREB_TAG, "Scores reset to 0 after 5s hold");
                         hold_reset = true;

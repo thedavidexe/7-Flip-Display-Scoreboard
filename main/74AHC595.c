@@ -371,8 +371,7 @@ void DisplayNumber(uint32_t number, uint8_t group)
         // only refresh if digit actually changed
 //        if (new_d != old_d) {
 //            DisplayDigit(new_d, pos);
-            
-             DisplayDigit(digits[idx], pos);
+        DisplayDigit(digits[idx], pos);
             
            // ESP_LOGI(DISP, "old: %d", status.groups[group].pattern[idx]);
             
