@@ -266,6 +266,9 @@ static void vScoreATask(void *arg)
                             score_value_a--;
                             decremented = true;
                         }
+                        // clear current display state so all coils fire in case they got jumbled
+                        status.current_pattern[SCORE_A_GROUP_INDEX] = 0;
+                        status.current_pattern[SCORE_B_GROUP_INDEX] = 0;
                         DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
                         ESP_LOGI(SCOREA_TAG, "Score A decrement on hold -> %u", (unsigned)score_value_a);
                         if (decremented) {
@@ -279,6 +282,9 @@ static void vScoreATask(void *arg)
                     if (level == 1) {
                         score_value_a = 0;
                         score_value_b = 0;
+                        // clear current display state so all coils fire in case they got jumbled
+                        status.current_pattern[SCORE_A_GROUP_INDEX] = 0;
+                        status.current_pattern[SCORE_B_GROUP_INDEX] = 0;
                         DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
                         DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
                         ESP_LOGI(SCOREA_TAG, "Scores reset to 0 after 5s hold");
@@ -389,6 +395,9 @@ static void vScoreBTask(void *arg)
                             score_value_b--;
                             decremented = true;
                         }
+                        // clear current display state so all coils fire in case they got jumbled
+                        status.current_pattern[SCORE_A_GROUP_INDEX] = 0;
+                        status.current_pattern[SCORE_B_GROUP_INDEX] = 0;
                         DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
                         ESP_LOGI(SCOREB_TAG, "Score B decrement on hold -> %u", (unsigned)score_value_b);
                         if (decremented) {
@@ -400,6 +409,9 @@ static void vScoreBTask(void *arg)
                 if (pressed && !hold_reset) {
                     int level = gpio_get_level(SCORE_B_INPUT_PIN);
                     if (level == 1) {
+                        // clear current display state so all coils fire in case they got jumbled
+                        status.current_pattern[SCORE_A_GROUP_INDEX] = 0;
+                        status.current_pattern[SCORE_B_GROUP_INDEX] = 0;
                         score_value_a = 0;
                         score_value_b = 0;
                         DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
