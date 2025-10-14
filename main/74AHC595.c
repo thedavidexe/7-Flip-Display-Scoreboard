@@ -228,24 +228,22 @@ void shift_register_send_chain(uint16_t *data, uint8_t count)
 // The returned value is a 16-bit number, where for each segment:
 // 0b01 means the segment is ON, and 0b10 means the segment is OFF,
 // packed in the following order: E, D, C, F, G, A, B.
-static uint16_t get_symbol_pattern(uint8_t segs) 
+// if target_seg is non-zero then will only return that single segment
+// which is between 0-7
+static uint16_t get_symbol_pattern(uint8_t segs, uint8_t target_seg) 
 {
     uint16_t pattern = 0;
     // Order of segments for packing:
     // "E", "D", "C", "F", "G", "A", "B"
     // corresponding to the input bits: 4, 3, 2, 5, 6, 0, 1.
     int bitMapping[7] = { 4, 3, 2, 5, 6, 0, 1 };
-
-    for (int i = 0; i < 7; i++) 
-    {
-        // If the input bit corresponding to the segment (according to the mapping) is set,
-        // assign the code 0b01 (segment on), otherwise 0b10 (segment off)
-        uint16_t bitValue = (segs & (1 << bitMapping[i])) ? 0x01 : 0x02;
-        // Calculate the shift - each segment uses 2 bits,
-        // and the most significant pair starts at bits 13-12 (decreasing by 2 bits for each subsequent pair)
-        int shift = (6 - i) * 2;
-        pattern |= (bitValue << shift);
-    }
+    // If the input bit corresponding to the segment (according to the mapping) is set,
+    // assign the code 0b01 (segment on), otherwise 0b10 (segment off)
+    uint16_t bitValue = (segs & (1 << bitMapping[target_seg])) ? 0x01 : 0x02;
+    // Calculate the shift - each segment uses 2 bits,
+    // and the most significant pair starts at bits 13-12 (decreasing by 2 bits for each subsequent pair)
+    int shift = (6 - target_seg) * 2;
+    pattern |= (bitValue << shift);
 
     return pattern;
 }
@@ -295,11 +293,11 @@ uint16_t get_digit_pattern(uint8_t digit)
  *
  * @param digit The digit to display (0–9) or 10 to clear the display.
  */
-void DisplayDigit(uint8_t digit, uint8_t target)
+void DisplayDigit(uint8_t digit, uint8_t target_disp)
 {
     uint16_t pattern = get_digit_pattern(digit);
     
-    DisplaySymbol(pattern, target);
+    DisplaySymbol(pattern, target_disp);
 }
 
 /**
@@ -448,116 +446,39 @@ void DisplayNumber(uint32_t number, uint8_t group)
 ////	
 ////	printf("\r\n");
 //}
-void DisplaySymbol(uint8_t pattern_raw, uint8_t target)
+void DisplaySymbol(uint8_t pattern_raw, uint8_t target_disp)
 {
-    uint8_t total = status.display_number;
-    uint8_t previous_pattern = status.current_pattern[target];
+    uint8_t total_disp = status.display_number;
+    uint8_t total_segs = 7; // hardcode 7 seg display
+    uint8_t previous_pattern = status.current_pattern[target_disp];
 
-    if (previous_pattern == pattern_raw || target >= total) {
+    // skip if this pattern is already showing on this display
+    if (previous_pattern == pattern_raw || target_disp >= total_disp) {
         return;
     }
 
     // Update the stored pattern for this display
-    status.current_pattern[target] = pattern_raw;
-
-    if (status.display_symbol_mode == SINGLE_SEGMENT) {
-        // Map segment indices for get_symbol_pattern
-        static const int bitMap[7] = { 4, 3, 2, 5, 6, 0, 1 };
-
-        // Toggle each segment that changed
-        for (uint8_t seg = 0; seg < 7; seg++) {
-            bool was_on = (previous_pattern & (1 << seg));
-            bool now_on = (pattern_raw & (1 << seg));
-            uint16_t pulse_pattern = 0;
-
-            if (!was_on && now_on) {
-                // On-pulse: extract two bits for this segment
-                uint16_t full = get_symbol_pattern((uint8_t)(1 << seg));
-                int idx = 0;
-                for (; idx < 7; idx++) {
-                    if (bitMap[idx] == seg) break;
-                }
-                int shift = (6 - idx) * 2;
-                pulse_pattern = full & ((uint16_t)0x0003 << shift);
-            }
-            else if (was_on && !now_on) {
-                // Off-pulse: reverse phase in the two bits
-                int idx = 0;
-                for (; idx < 7; idx++) {
-                    if (bitMap[idx] == seg) break;
-                }
-                int shift = (6 - idx) * 2;
-                pulse_pattern = (uint16_t)0x0002 << shift;
-            }
-            else {
-                // No change for this segment
-                continue;
-            }
-
-            // Build shift register chain for only the target display
-            uint16_t chain[total];
-            for (uint8_t i = 0; i < total; i++) {
-                chain[i] = (i == target) ? pulse_pattern : 0x0000;
-            }
-
-            // Enable power and send pulse
-            gpio_set_level(POWER_PIN, 1);
-            vTaskDelay(5 / portTICK_PERIOD_MS);
-            shift_register_send_chain(chain, total);
-            // Wait for actuator movement
-            vTaskDelay(100 / portTICK_PERIOD_MS);
-            // Clear outputs to release coils
-            for (uint8_t i = 0; i < total; i++) {
-                chain[i] = 0x0000;
-            }
-            shift_register_send_chain(chain, total);
-            // Short pause before next segment
-            vTaskDelay(1 / portTICK_PERIOD_MS);
-            // Disable power
-            gpio_set_level(POWER_PIN, 0);
-        }
-    }
-    else if (status.display_symbol_mode == ALL_DISPLAY) {
-        // Full-display mode: apply the same pattern to all displays
-        uint16_t full = get_symbol_pattern(pattern_raw);
-        uint16_t chain[total];
-
-        // Fill chain so every display receives the full pattern
-        for (uint8_t i = 0; i < total; i++) {
-            chain[i] = full;
-        }
-
-        // Enable power and update all displays
-        gpio_set_level(POWER_PIN, 1);
-        shift_register_send_chain(chain, total);
-        // Wait for mechanical response
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-        // Clear outputs to release coils
-        for (uint8_t i = 0; i < total; i++) {
-            chain[i] = 0x0000;
-        }
-        shift_register_send_chain(chain, total);
-        vTaskDelay(1 / portTICK_PERIOD_MS);
-        gpio_set_level(POWER_PIN, 0);
-    }
-    else {
+    status.current_pattern[target_disp] = pattern_raw;
+    
+    // change each flap 1 at a time to reduce instantaneous power draw
+    gpio_set_level(POWER_PIN, 1);
+    for (uint8_t seg_id = 0; seg_id < total_segs; seg_id++) {
         // Single-display mode: update only the targeted display
-        uint16_t full = get_symbol_pattern(pattern_raw);
-        uint16_t chain[total];
-        for (uint8_t i = 0; i < total; i++) {
-            chain[i] = (i == target) ? full : 0x0000;
+        uint16_t full = get_symbol_pattern(pattern_raw, seg_id);
+        uint16_t chain[total_disp];
+        for (uint8_t i = 0; i < total_disp; i++) {
+            chain[i] = (i == target_disp) ? full : 0x0000;
         }
-
-        gpio_set_level(POWER_PIN, 1);
-        shift_register_send_chain(chain, total);
+        shift_register_send_chain(chain, total_disp);
         vTaskDelay(100 / portTICK_PERIOD_MS);
-        for (uint8_t i = 0; i < total; i++) {
+        for (uint8_t i = 0; i < total_disp; i++) {
             chain[i] = 0x0000;
         }
-        shift_register_send_chain(chain, total);
+        shift_register_send_chain(chain, total_disp);
         vTaskDelay(1 / portTICK_PERIOD_MS);
-        gpio_set_level(POWER_PIN, 0);
     }
+    gpio_set_level(POWER_PIN, 0);
+    
 }
 
 

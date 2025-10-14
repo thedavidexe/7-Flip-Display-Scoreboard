@@ -198,7 +198,7 @@ static void vScoreATask(void *arg)
 {
     uint32_t evt;
     // Initialize display with current score
-	vTaskDelay(250 / portTICK_PERIOD_MS);  // this allows the other score to init first to avoid updating too many displays at once
+	vTaskDelay(pdMS_TO_TICKS(1500));  // this allows the other score to init first to avoid updating too many displays at once
     DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
     ESP_LOGI(SCOREA_TAG, "Score A task started (group=%d, initial=%u)", SCORE_A_GROUP_INDEX, (unsigned)score_value_a);
     bool pressed = false; // latched logical state
