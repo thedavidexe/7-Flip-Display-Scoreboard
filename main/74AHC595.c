@@ -35,6 +35,7 @@
 // Initialization
 extern status_t status;
 static int last_data_bit = -1;
+static const uint8_t bit_seg_pos_mapping[7] = { 4, 3, 2, 5, 6, 0, 1 };
 
 /* Helper function to initialize GPIO */
 esp_err_t gpio_init(gpio_int_type_t type, gpio_mode_t mode, gpio_pulldown_t pull_down, gpio_pullup_t pull_up, int no, uint8_t initial_state)
@@ -235,11 +236,9 @@ static uint16_t get_symbol_pattern(uint8_t segs, uint8_t target_seg)
     uint16_t pattern = 0;
     // Order of segments for packing:
     // "E", "D", "C", "F", "G", "A", "B"
-    // corresponding to the input bits: 4, 3, 2, 5, 6, 0, 1.
-    int bitMapping[7] = { 4, 3, 2, 5, 6, 0, 1 };
     // If the input bit corresponding to the segment (according to the mapping) is set,
     // assign the code 0b01 (segment on), otherwise 0b10 (segment off)
-    uint16_t bitValue = (segs & (1 << bitMapping[target_seg])) ? 0x01 : 0x02;
+    uint16_t bitValue = (segs & (1 << bit_seg_pos_mapping[target_seg])) ? 0x01 : 0x02;
     // Calculate the shift - each segment uses 2 bits,
     // and the most significant pair starts at bits 13-12 (decreasing by 2 bits for each subsequent pair)
     int shift = (6 - target_seg) * 2;
@@ -451,18 +450,29 @@ void DisplaySymbol(uint8_t pattern_raw, uint8_t target_disp)
     uint8_t total_disp = status.display_number;
     uint8_t total_segs = 7; // hardcode 7 seg display
     uint8_t previous_pattern = status.current_pattern[target_disp];
+    uint8_t previous_seg_same_skip = 0; // 0 means bits differ, don't skip change, 1 is they are the same, skip
 
     // skip if this pattern is already showing on this display
     if (previous_pattern == pattern_raw || target_disp >= total_disp) {
         return;
     }
-
+    
+    if (previous_pattern != 0) {
+        // figure out which segments have changed, if previous_pattern was cleared then don't skip anything
+        previous_seg_same_skip = ~(previous_pattern ^ pattern_raw);
+    }
+    
     // Update the stored pattern for this display
     status.current_pattern[target_disp] = pattern_raw;
     
     // change each flap 1 at a time to reduce instantaneous power draw
     gpio_set_level(POWER_PIN, 1);
     for (uint8_t seg_id = 0; seg_id < total_segs; seg_id++) {
+        
+        if ((previous_seg_same_skip >> bit_seg_pos_mapping[seg_id]) & 1) {
+            // if 1 then this seg is already set so skip changing it
+            continue;
+        }
         // Single-display mode: update only the targeted display
         uint16_t full = get_symbol_pattern(pattern_raw, seg_id);
         uint16_t chain[total_disp];
