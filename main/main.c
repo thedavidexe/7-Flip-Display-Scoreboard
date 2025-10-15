@@ -53,6 +53,11 @@ static TimerHandle_t xScoreAHoldTimer = NULL;
 static TimerHandle_t xScoreAResetTimer = NULL;
 
 enum {
+    BUTTON_PRESSED = 0,
+    BUTTON_NOT_PRESSED = 1
+};
+
+enum {
     SCORE_A_EVENT_EDGE = 1,
     SCORE_A_EVENT_HOLD = 2,
     SCORE_A_EVENT_RESET = 3
@@ -76,6 +81,8 @@ enum {
 #define SCORE_A_GROUP_INDEX   0
 // Debounce time for mechanical button (ms)
 #define SCORE_DEBOUNCE_MS   50
+
+#define FULL_DISPLAY_RESET_TIME 1500  // 100ms * 7segs * 2digits + 100 buffer
 
 // Player B input on GPIO4
 #define SCORE_B_INPUT_PIN   GPIO_NUM_4
@@ -174,7 +181,7 @@ static void init_score_a_input(void)
     gpio_config_t io_conf = {
         .pin_bit_mask = 1ULL << SCORE_A_INPUT_PIN,
         .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,    // GPIO32 supports internal pull-up
+        .pull_up_en = GPIO_PULLUP_ENABLE,    // GPIO32 supports internal pull-up
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_ANYEDGE       // Handle press and release with debounce
     };
@@ -198,7 +205,7 @@ static void vScoreATask(void *arg)
 {
     uint32_t evt;
     // Initialize display with current score
-	vTaskDelay(pdMS_TO_TICKS(1500));  // this allows the other score to init first to avoid updating too many displays at once
+	vTaskDelay(pdMS_TO_TICKS(FULL_DISPLAY_RESET_TIME));  // this allows the other score to init first to avoid updating too many displays at once
     DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
     ESP_LOGI(SCOREA_TAG, "Score A task started (group=%d, initial=%u)", SCORE_A_GROUP_INDEX, (unsigned)score_value_a);
     bool pressed = false; // latched logical state
@@ -292,7 +299,7 @@ static void vScoreATask(void *arg)
                         // clear current display state so all coils fire in case they got jumbled
                         clear_all_disp_state();
                         DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
-                        vTaskDelay(pdMS_TO_TICKS(250));
+                        vTaskDelay(pdMS_TO_TICKS(FULL_DISPLAY_RESET_TIME));
                         DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
                         ESP_LOGI(SCOREA_TAG, "Scores reset to 0 after 5s hold");
                         hold_reset = true;
@@ -310,7 +317,7 @@ static void init_score_b_input(void)
     gpio_config_t io_conf = {
         .pin_bit_mask = 1ULL << SCORE_B_INPUT_PIN,
         .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_ANYEDGE
     };
@@ -331,103 +338,87 @@ static void vScoreBTask(void *arg)
     // Initialize display for B with current score
     DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
     ESP_LOGI(SCOREB_TAG, "Score B task started (group=%d, initial=%u)", SCORE_B_GROUP_INDEX, (unsigned)score_value_b);
-    bool pressed = false;
-    int stable_level = gpio_get_level(SCORE_B_INPUT_PIN);
-    pressed = (stable_level == 1);
+    // false means button is not pressed (value of 1), true means button pressed (gpio value of 0)
+    bool previous_button_state = BUTTON_NOT_PRESSED;
+    bool current_button_state = BUTTON_NOT_PRESSED;
     bool hold_decremented = false;
     bool hold_reset = false;
     for(;;) {
         if (xQueueReceive(xScoreBQueue, &evt, portMAX_DELAY) == pdTRUE) {
+            // for this interrupt get current button state
+            current_button_state = gpio_get_level(SCORE_B_INPUT_PIN);
             if (evt == SCORE_B_EVENT_EDGE) {
-                int l1 = gpio_get_level(SCORE_B_INPUT_PIN);
-                vTaskDelay(pdMS_TO_TICKS(SCORE_DEBOUNCE_MS));
-                int l2 = gpio_get_level(SCORE_B_INPUT_PIN);
-
-                if (l1 == l2 && l2 != stable_level) {
-                    stable_level = l2;
-                    if (stable_level == 0 && pressed) {
-                        // just now released
-                        pressed = false;
-                        if (xScoreBHoldTimer && xTimerIsTimerActive(xScoreBHoldTimer) != pdFALSE) {
-                            if (xTimerStop(xScoreBHoldTimer, 0) != pdPASS) {
-                                ESP_LOGW(SCOREB_TAG, "Failed to stop hold timer on release");
-                            }
+                if (previous_button_state == BUTTON_PRESSED && current_button_state == BUTTON_NOT_PRESSED) {
+                    // just now released
+                    if (xScoreBHoldTimer && xTimerIsTimerActive(xScoreBHoldTimer) != pdFALSE) {
+                        if (xTimerStop(xScoreBHoldTimer, 0) != pdPASS) {
+                            ESP_LOGW(SCOREB_TAG, "Failed to stop hold timer on release");
                         }
-                        if (xScoreBResetTimer && xTimerIsTimerActive(xScoreBResetTimer) != pdFALSE) {
-                            if (xTimerStop(xScoreBResetTimer, 0) != pdPASS) {
-                                ESP_LOGW(SCOREB_TAG, "Failed to stop reset timer on release");
-                            }
+                    }
+                    if (xScoreBResetTimer && xTimerIsTimerActive(xScoreBResetTimer) != pdFALSE) {
+                        if (xTimerStop(xScoreBResetTimer, 0) != pdPASS) {
+                            ESP_LOGW(SCOREB_TAG, "Failed to stop reset timer on release");
                         }
-                        if (!hold_decremented && !hold_reset) {
-                            score_value_b++;
-                            DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
-                            ESP_LOGI(SCOREB_TAG, "Score B increment on release -> %u", (unsigned)score_value_b);
-                        } else {
-                            hold_decremented = false;
-                            hold_reset = false;
-                        }
-                    } else if (stable_level == 1 && !pressed) {
-                        // just now pressed
-                        pressed = true;
+                    }
+                    if (!hold_decremented && !hold_reset) {
+                        score_value_b++;
+                        DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
+                        ESP_LOGI(SCOREB_TAG, "Score B increment on release -> %u", (unsigned)score_value_b);
+                    } else {
                         hold_decremented = false;
                         hold_reset = false;
-                        if (xScoreBHoldTimer) {
-                            if (xTimerIsTimerActive(xScoreBHoldTimer) != pdFALSE) {
-                                if (xTimerStop(xScoreBHoldTimer, 0) != pdPASS) {
-                                    ESP_LOGW(SCOREB_TAG, "Failed to stop hold timer before restart");
-                                }
-                            }
-                            if (xTimerStart(xScoreBHoldTimer, 0) != pdPASS) {
-                                ESP_LOGW(SCOREB_TAG, "Failed to start hold timer");
+                    }
+                } else if (previous_button_state == BUTTON_NOT_PRESSED && current_button_state == BUTTON_PRESSED) {
+                    // just now pressed
+                    hold_decremented = false;
+                    hold_reset = false;
+                    if (xScoreBHoldTimer) {
+                        if (xTimerIsTimerActive(xScoreBHoldTimer) != pdFALSE) {
+                            if (xTimerStop(xScoreBHoldTimer, 0) != pdPASS) {
+                                ESP_LOGW(SCOREB_TAG, "Failed to stop hold timer before restart");
                             }
                         }
-                        if (xScoreBResetTimer) {
-                            if (xTimerIsTimerActive(xScoreBResetTimer) != pdFALSE) {
-                                if (xTimerStop(xScoreBResetTimer, 0) != pdPASS) {
-                                    ESP_LOGW(SCOREB_TAG, "Failed to stop reset timer before restart");
-                                }
+                        if (xTimerStart(xScoreBHoldTimer, 0) != pdPASS) {
+                            ESP_LOGW(SCOREB_TAG, "Failed to start hold timer");
+                        }
+                    }
+                    if (xScoreBResetTimer) {
+                        if (xTimerIsTimerActive(xScoreBResetTimer) != pdFALSE) {
+                            if (xTimerStop(xScoreBResetTimer, 0) != pdPASS) {
+                                ESP_LOGW(SCOREB_TAG, "Failed to stop reset timer before restart");
                             }
-                            if (xTimerStart(xScoreBResetTimer, 0) != pdPASS) {
-                                ESP_LOGW(SCOREB_TAG, "Failed to start reset timer");
-                            }
+                        }
+                        if (xTimerStart(xScoreBResetTimer, 0) != pdPASS) {
+                            ESP_LOGW(SCOREB_TAG, "Failed to start reset timer");
                         }
                     }
                 }
             } else if (evt == SCORE_B_EVENT_HOLD) {
-                if (pressed && !hold_decremented) {
-                    int level = gpio_get_level(SCORE_B_INPUT_PIN);
-                    if (level == 1) {
-                        bool decremented = false;
-                        if (score_value_b > 0) {
-                            score_value_b--;
-                            decremented = true;
-                        }
+                if (current_button_state == BUTTON_PRESSED && !hold_decremented) {
+                    if (score_value_b > 0) {
+                        score_value_b--;
                         // clear current display state so all coils fire in case they got jumbled
                         clear_all_disp_state();
                         DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
                         ESP_LOGI(SCOREB_TAG, "Score B decrement on hold -> %u", (unsigned)score_value_b);
-                        if (decremented) {
-                            hold_decremented = true;
-                        }
                     }
+                    hold_decremented = true;
                 }
             } else if (evt == SCORE_B_EVENT_RESET) {
-                if (pressed && !hold_reset) {
-                    int level = gpio_get_level(SCORE_B_INPUT_PIN);
-                    if (level == 1) {
-                        // clear current display state so all coils fire in case they got jumbled
-                        clear_all_disp_state();
-                        score_value_a = 0;
-                        score_value_b = 0;
-                        DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
-                        vTaskDelay(pdMS_TO_TICKS(250));
-                        DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
-                        ESP_LOGI(SCOREB_TAG, "Scores reset to 0 after 5s hold");
-                        hold_reset = true;
-                        hold_decremented = true;
-                    }
+                if (current_button_state == BUTTON_PRESSED && !hold_reset) {
+                    // clear current display state so all coils fire in case they got jumbled
+                    clear_all_disp_state();
+                    score_value_a = 0;
+                    score_value_b = 0;
+                    DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
+                    vTaskDelay(pdMS_TO_TICKS(FULL_DISPLAY_RESET_TIME));
+                    DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
+                    ESP_LOGI(SCOREB_TAG, "Scores reset to 0 after 5s hold");
+                    hold_reset = true;
+                    hold_decremented = true;
                 }
             }
+            previous_button_state = current_button_state;
         }
     }
 }
@@ -585,6 +576,15 @@ void app_main(void)
 	show_config();
 	
     LED_set_color(YELLOW, 1);
+
+    // DEBUG GPIO INPUTS
+    //     // Main loop - print GPIO state every second
+    // while (1) {
+    //     int level = gpio_get_level(SCORE_B_INPUT_PIN);
+    //     ESP_LOGI(SCOREB_TAG, "GPIO %d state: %d", SCORE_B_INPUT_PIN, level);
+        
+    //     vTaskDelay(pdMS_TO_TICKS(50));
+    // }
 
     // Setup score A input and task
     xScoreAQueue = xQueueCreate(4, sizeof(uint32_t));
