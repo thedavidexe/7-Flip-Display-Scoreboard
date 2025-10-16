@@ -208,105 +208,87 @@ static void vScoreATask(void *arg)
 	vTaskDelay(pdMS_TO_TICKS(FULL_DISPLAY_RESET_TIME));  // this allows the other score to init first to avoid updating too many displays at once
     DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
     ESP_LOGI(SCOREA_TAG, "Score A task started (group=%d, initial=%u)", SCORE_A_GROUP_INDEX, (unsigned)score_value_a);
-    bool pressed = false; // latched logical state
-    int stable_level = gpio_get_level(SCORE_A_INPUT_PIN);
-    pressed = (stable_level == 1);
+    // false means button is not pressed (value of 1), true means button pressed (gpio value of 0)
+    bool previous_button_state = BUTTON_NOT_PRESSED;
+    bool current_button_state = BUTTON_NOT_PRESSED;
     bool hold_decremented = false;
     bool hold_reset = false;
     for(;;) {
         if (xQueueReceive(xScoreAQueue, &evt, portMAX_DELAY) == pdTRUE) {
+            // for this interrupt get current button state
+            current_button_state = gpio_get_level(SCORE_A_INPUT_PIN);
             if (evt == SCORE_A_EVENT_EDGE) {
-                // Sample level, wait debounce, sample again
-                int l1 = gpio_get_level(SCORE_A_INPUT_PIN);
-                vTaskDelay(pdMS_TO_TICKS(SCORE_DEBOUNCE_MS));
-                int l2 = gpio_get_level(SCORE_A_INPUT_PIN);
-
-                if (l1 == l2 && l2 != stable_level) {
-                    // Stable change detected
-                    stable_level = l2;
-                    if (stable_level == 0 && pressed) {
-                        // from pressed to released
-                        pressed = false;
-                        if (xScoreAHoldTimer && xTimerIsTimerActive(xScoreAHoldTimer) != pdFALSE) {
-                            if (xTimerStop(xScoreAHoldTimer, 0) != pdPASS) {
-                                ESP_LOGW(SCOREA_TAG, "Failed to stop hold timer on release");
-                            }
+                if (previous_button_state == BUTTON_PRESSED && current_button_state == BUTTON_NOT_PRESSED) {
+                    // just now released
+                    if (xScoreAHoldTimer && xTimerIsTimerActive(xScoreAHoldTimer) != pdFALSE) {
+                        if (xTimerStop(xScoreAHoldTimer, 0) != pdPASS) {
+                            ESP_LOGW(SCOREA_TAG, "Failed to stop hold timer on release");
                         }
-                        if (xScoreAResetTimer && xTimerIsTimerActive(xScoreAResetTimer) != pdFALSE) {
-                            if (xTimerStop(xScoreAResetTimer, 0) != pdPASS) {
-                                ESP_LOGW(SCOREA_TAG, "Failed to stop reset timer on release");
-                            }
+                    }
+                    if (xScoreAResetTimer && xTimerIsTimerActive(xScoreAResetTimer) != pdFALSE) {
+                        if (xTimerStop(xScoreAResetTimer, 0) != pdPASS) {
+                            ESP_LOGW(SCOREA_TAG, "Failed to stop reset timer on release");
                         }
-                        if (!hold_decremented && !hold_reset) {
-                            score_value_a++;
-                            DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
-                            ESP_LOGI(SCOREA_TAG, "Score A increment on release -> %u", (unsigned)score_value_a);
-                        } else {
-                            hold_decremented = false;
-                            hold_reset = false;
-                        }
-                    } else if (stable_level == 1 && !pressed) {
-                        // Confirmed pressed
-                        pressed = true;
+                    }
+                    if (!hold_decremented && !hold_reset) {
+                        score_value_a++;
+                        DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
+                        ESP_LOGI(SCOREA_TAG, "Score A increment on release -> %u", (unsigned)score_value_a);
+                    } else {
                         hold_decremented = false;
                         hold_reset = false;
-                        if (xScoreAHoldTimer) {
-                            if (xTimerIsTimerActive(xScoreAHoldTimer) != pdFALSE) {
-                                if (xTimerStop(xScoreAHoldTimer, 0) != pdPASS) {
-                                    ESP_LOGW(SCOREA_TAG, "Failed to stop hold timer before restart");
-                                }
-                            }
-                            if (xTimerStart(xScoreAHoldTimer, 0) != pdPASS) {
-                                ESP_LOGW(SCOREA_TAG, "Failed to start hold timer");
+                    }
+                } else if (previous_button_state == BUTTON_NOT_PRESSED && current_button_state == BUTTON_PRESSED) {
+                    // just now pressed
+                    hold_decremented = false;
+                    hold_reset = false;
+                    if (xScoreAHoldTimer) {
+                        if (xTimerIsTimerActive(xScoreAHoldTimer) != pdFALSE) {
+                            if (xTimerStop(xScoreAHoldTimer, 0) != pdPASS) {
+                                ESP_LOGW(SCOREA_TAG, "Failed to stop hold timer before restart");
                             }
                         }
-                        if (xScoreAResetTimer) {
-                            if (xTimerIsTimerActive(xScoreAResetTimer) != pdFALSE) {
-                                if (xTimerStop(xScoreAResetTimer, 0) != pdPASS) {
-                                    ESP_LOGW(SCOREA_TAG, "Failed to stop reset timer before restart");
-                                }
+                        if (xTimerStart(xScoreAHoldTimer, 0) != pdPASS) {
+                            ESP_LOGW(SCOREA_TAG, "Failed to start hold timer");
+                        }
+                    }
+                    if (xScoreAResetTimer) {
+                        if (xTimerIsTimerActive(xScoreAResetTimer) != pdFALSE) {
+                            if (xTimerStop(xScoreAResetTimer, 0) != pdPASS) {
+                                ESP_LOGW(SCOREA_TAG, "Failed to stop reset timer before restart");
                             }
-                            if (xTimerStart(xScoreAResetTimer, 0) != pdPASS) {
-                                ESP_LOGW(SCOREA_TAG, "Failed to start reset timer");
-                            }
+                        }
+                        if (xTimerStart(xScoreAResetTimer, 0) != pdPASS) {
+                            ESP_LOGW(SCOREA_TAG, "Failed to start reset timer");
                         }
                     }
                 }
             } else if (evt == SCORE_A_EVENT_HOLD) {
-                if (pressed && !hold_decremented) {
-                    int level = gpio_get_level(SCORE_A_INPUT_PIN);
-                    if (level == 1) {
-                        bool decremented = false;
-                        if (score_value_a > 0) {
-                            score_value_a--;
-                            decremented = true;
-                        }
+                if (current_button_state == BUTTON_PRESSED && !hold_decremented) {
+                    if (score_value_a > 0) {
+                        score_value_a--;
                         // clear current display state so all coils fire in case they got jumbled
                         clear_all_disp_state();
                         DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
                         ESP_LOGI(SCOREA_TAG, "Score A decrement on hold -> %u", (unsigned)score_value_a);
-                        if (decremented) {
-                            hold_decremented = true;
-                        }
                     }
+                    hold_decremented = true;
                 }
             } else if (evt == SCORE_A_EVENT_RESET) {
-                if (pressed && !hold_reset) {
-                    int level = gpio_get_level(SCORE_A_INPUT_PIN);
-                    if (level == 1) {
-                        score_value_a = 0;
-                        score_value_b = 0;
-                        // clear current display state so all coils fire in case they got jumbled
-                        clear_all_disp_state();
-                        DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
-                        vTaskDelay(pdMS_TO_TICKS(FULL_DISPLAY_RESET_TIME));
-                        DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
-                        ESP_LOGI(SCOREA_TAG, "Scores reset to 0 after 5s hold");
-                        hold_reset = true;
-                        hold_decremented = true;
-                    }
+                if (current_button_state == BUTTON_PRESSED && !hold_reset) {
+                    score_value_a = 0;
+                    score_value_b = 0;
+                    // clear current display state so all coils fire in case they got jumbled
+                    clear_all_disp_state();
+                    DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
+                    vTaskDelay(pdMS_TO_TICKS(FULL_DISPLAY_RESET_TIME));
+                    DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
+                    ESP_LOGI(SCOREA_TAG, "Scores reset to 0 after 5s hold");
+                    hold_reset = true;
+                    hold_decremented = true;
                 }
             }
+            previous_button_state = current_button_state;
         }
     }
 }
