@@ -288,6 +288,7 @@ static void vScoreATask(void *arg)
                     score_value_b = 0;
                     // clear current display state so all coils fire in case they got jumbled
                     clear_teamA_disp_state();
+                    clear_teamB_disp_state();
                     DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
                     vTaskDelay(pdMS_TO_TICKS(FULL_DISPLAY_RESET_TIME));
                     DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
@@ -397,6 +398,7 @@ static void vScoreBTask(void *arg)
             } else if (evt == SCORE_B_EVENT_RESET) {
                 if (current_button_state == BUTTON_PRESSED && !hold_reset) {
                     // clear current display state so all coils fire in case they got jumbled
+                    clear_teamA_disp_state();
                     clear_teamB_disp_state();
                     score_value_a = 0;
                     score_value_b = 0;
