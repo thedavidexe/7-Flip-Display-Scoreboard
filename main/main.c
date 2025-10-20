@@ -167,9 +167,17 @@ static void score_b_reset_timer_callback(TimerHandle_t xTimer)
     }
 }
 
-static void clear_all_disp_state(void)
+static void clear_teamA_disp_state(void)
 {
-    for (uint8_t i = 0; i < 4; i++) {
+    for (uint8_t i = 0; i < 2; i++) {
+        status.current_pattern[i] = 0;
+    }
+
+}
+
+static void clear_teamB_disp_state(void)
+{
+    for (uint8_t i = 2; i < 4; i++) {
         status.current_pattern[i] = 0;
     }
 
@@ -268,7 +276,7 @@ static void vScoreATask(void *arg)
                     if (score_value_a > 0) {
                         score_value_a--;
                         // clear current display state so all coils fire in case they got jumbled
-                        clear_all_disp_state();
+                        clear_teamA_disp_state();
                         DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
                         ESP_LOGI(SCOREA_TAG, "Score A decrement on hold -> %u", (unsigned)score_value_a);
                     }
@@ -279,7 +287,7 @@ static void vScoreATask(void *arg)
                     score_value_a = 0;
                     score_value_b = 0;
                     // clear current display state so all coils fire in case they got jumbled
-                    clear_all_disp_state();
+                    clear_teamA_disp_state();
                     DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
                     vTaskDelay(pdMS_TO_TICKS(FULL_DISPLAY_RESET_TIME));
                     DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
@@ -380,7 +388,7 @@ static void vScoreBTask(void *arg)
                     if (score_value_b > 0) {
                         score_value_b--;
                         // clear current display state so all coils fire in case they got jumbled
-                        clear_all_disp_state();
+                        clear_teamB_disp_state();
                         DisplayNumber(score_value_b, SCORE_B_GROUP_INDEX);
                         ESP_LOGI(SCOREB_TAG, "Score B decrement on hold -> %u", (unsigned)score_value_b);
                     }
@@ -389,7 +397,7 @@ static void vScoreBTask(void *arg)
             } else if (evt == SCORE_B_EVENT_RESET) {
                 if (current_button_state == BUTTON_PRESSED && !hold_reset) {
                     // clear current display state so all coils fire in case they got jumbled
-                    clear_all_disp_state();
+                    clear_teamB_disp_state();
                     score_value_a = 0;
                     score_value_b = 0;
                     DisplayNumber(score_value_a, SCORE_A_GROUP_INDEX);
@@ -559,14 +567,7 @@ void app_main(void)
 	
     LED_set_color(YELLOW, 1);
 
-    // DEBUG GPIO INPUTS
-    //     // Main loop - print GPIO state every second
-    // while (1) {
-    //     int level = gpio_get_level(SCORE_B_INPUT_PIN);
-    //     ESP_LOGI(SCOREB_TAG, "GPIO %d state: %d", SCORE_B_INPUT_PIN, level);
-        
-    //     vTaskDelay(pdMS_TO_TICKS(50));
-    // }
+
 
     // Setup score A input and task
     xScoreAQueue = xQueueCreate(4, sizeof(uint32_t));
@@ -605,6 +606,17 @@ void app_main(void)
     } else {
         ESP_LOGE(FIRM, "Failed to create score B queue");
     }
+
+        // DEBUG GPIO INPUTS
+        // Main loop - print GPIO state every second
+    // while (1) {
+    //     int level = gpio_get_level(SCORE_A_INPUT_PIN);
+    //     ESP_LOGI(SCOREA_TAG, "GPIO %d state: %d", SCORE_A_INPUT_PIN, level);
+    //     vTaskDelay(pdMS_TO_TICKS(100));
+    //     int level2 = gpio_get_level(SCORE_B_INPUT_PIN);
+    //     ESP_LOGI(SCOREB_TAG, "GPIO %d state: %d", SCORE_B_INPUT_PIN, level2);
+    //     vTaskDelay(pdMS_TO_TICKS(100));
+    // }
     
     vTaskDelete(NULL);
 }
