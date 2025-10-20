@@ -84,6 +84,9 @@ enum {
 
 #define FULL_DISPLAY_RESET_TIME 1500  // 100ms * 7segs * 2digits + 100 buffer
 
+#define REMOTE_DECREMENT_HOLD_TIME 1500  //hold remote 1.5s to decrement
+#define REMOTE_FULL_RESET_HOLD_TIME 3000  // hold remote for 3s to reset all
+
 // Player B input on GPIO4
 #define SCORE_B_INPUT_PIN   GPIO_NUM_4
 #define SCORE_B_GROUP_INDEX 1
@@ -576,11 +579,11 @@ void app_main(void)
     if (xScoreAQueue != NULL) {
         ESP_LOGI(SCOREA_TAG, "Score A queue created");
         init_score_a_input();
-        xScoreAHoldTimer = xTimerCreate("ScoreAHold", pdMS_TO_TICKS(2000), pdFALSE, NULL, score_a_hold_timer_callback);
+        xScoreAHoldTimer = xTimerCreate("ScoreAHold", pdMS_TO_TICKS(REMOTE_DECREMENT_HOLD_TIME), pdFALSE, NULL, score_a_hold_timer_callback);
         if (xScoreAHoldTimer == NULL) {
             ESP_LOGE(SCOREA_TAG, "Failed to create hold timer");
         }
-        xScoreAResetTimer = xTimerCreate("ScoreAReset", pdMS_TO_TICKS(5000), pdFALSE, NULL, score_a_reset_timer_callback);
+        xScoreAResetTimer = xTimerCreate("ScoreAReset", pdMS_TO_TICKS(REMOTE_FULL_RESET_HOLD_TIME), pdFALSE, NULL, score_a_reset_timer_callback);
         if (xScoreAResetTimer == NULL) {
             ESP_LOGE(SCOREA_TAG, "Failed to create reset timer");
         }
@@ -595,11 +598,11 @@ void app_main(void)
     if (xScoreBQueue != NULL) {
         ESP_LOGI(SCOREB_TAG, "Score B queue created");
         init_score_b_input();
-        xScoreBHoldTimer = xTimerCreate("ScoreBHold", pdMS_TO_TICKS(2000), pdFALSE, NULL, score_b_hold_timer_callback);
+        xScoreBHoldTimer = xTimerCreate("ScoreBHold", pdMS_TO_TICKS(REMOTE_DECREMENT_HOLD_TIME), pdFALSE, NULL, score_b_hold_timer_callback);
         if (xScoreBHoldTimer == NULL) {
             ESP_LOGE(SCOREB_TAG, "Failed to create hold timer");
         }
-        xScoreBResetTimer = xTimerCreate("ScoreBReset", pdMS_TO_TICKS(5000), pdFALSE, NULL, score_b_reset_timer_callback);
+        xScoreBResetTimer = xTimerCreate("ScoreBReset", pdMS_TO_TICKS(REMOTE_FULL_RESET_HOLD_TIME), pdFALSE, NULL, score_b_reset_timer_callback);
         if (xScoreBResetTimer == NULL) {
             ESP_LOGE(SCOREB_TAG, "Failed to create reset timer");
         }
