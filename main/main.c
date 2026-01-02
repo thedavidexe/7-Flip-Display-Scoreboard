@@ -37,6 +37,7 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "driver/gpio.h"
+#include "ble_scoreboard.h"
 
 //Show dump of entire NVS
 //#define NVS_DATA
@@ -568,11 +569,16 @@ void app_main(void)
     hardcode_two_groups_01_and_23();
     // // Optional: persist to NVS so web UI reflects the hardcoded groups
     // save_config_to_nvs();
-	
+
 	show_config();
-	
+
     // LED_set_color(YELLOW, 1);
 
+    // Initialize BLE scoreboard service
+    // - Clears existing bonds (requires re-pairing after each boot)
+    // - Generates and displays hardware ID on 7-segment display
+    // - Starts BLE advertising
+    ble_scoreboard_init();
 
 // TODO: add back remote control logic (for now just doing phone app score control via ble)
     // // Setup score A input and task
