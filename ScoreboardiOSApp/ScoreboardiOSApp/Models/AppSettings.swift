@@ -2,15 +2,28 @@ import Foundation
 import SwiftUI
 
 /// Persistent app settings stored in UserDefaults
-class AppSettings: ObservableObject {
+@Observable
+class AppSettings {
     /// Score increment value for the large + button
-    @AppStorage("scoreIncrement") var scoreIncrement: Int = 1
+    var scoreIncrement: Int {
+        didSet { UserDefaults.standard.set(scoreIncrement, forKey: "scoreIncrement") }
+    }
 
     /// Whether to use slow (10s) timer display updates
-    @AppStorage("slowTimerUpdates") var slowTimerUpdates: Bool = false
+    var slowTimerUpdates: Bool {
+        didSet { UserDefaults.standard.set(slowTimerUpdates, forKey: "slowTimerUpdates") }
+    }
 
     /// Hardware ID of the last connected scoreboard
-    @AppStorage("lastConnectedId") var lastConnectedId: String?
+    var lastConnectedId: String? {
+        didSet { UserDefaults.standard.set(lastConnectedId, forKey: "lastConnectedId") }
+    }
+
+    init() {
+        self.scoreIncrement = UserDefaults.standard.object(forKey: "scoreIncrement") as? Int ?? 1
+        self.slowTimerUpdates = UserDefaults.standard.bool(forKey: "slowTimerUpdates")
+        self.lastConnectedId = UserDefaults.standard.string(forKey: "lastConnectedId")
+    }
 }
 
 /// Sport presets for quick score increment configuration

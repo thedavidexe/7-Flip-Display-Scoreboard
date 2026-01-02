@@ -21,7 +21,6 @@
 #include "host/ble_gap.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
-#include "store/config/ble_store_config.h"
 
 static const char *TAG = "BLE_SCOREBOARD";
 
@@ -577,9 +576,6 @@ void ble_scoreboard_init(void)
     if (rc != 0) {
         ESP_LOGW(TAG, "Failed to set device name: %d", rc);
     }
-
-    // Initialize NVS-based bond storage
-    ble_store_config_init();
 
     // Start the BLE host task
     nimble_port_freertos_init(ble_host_task);
