@@ -418,9 +418,10 @@ static void vScoreBTask(void *arg)
     }
 }
 
-void vDataProcessingTask(void *arg);
-void vClockModeHandlingTask(void *arg);
-void vTimerModeHandlingTask(void *arg);
+// below are the tasks for the original display, no longer using these.
+// void vDataProcessingTask(void *arg);
+// void vClockModeHandlingTask(void *arg);
+// void vTimerModeHandlingTask(void *arg);
 
 // Force two groups: [0..1] and [2..3]
 static void hardcode_two_groups_01_and_23(void)
@@ -570,47 +571,47 @@ void app_main(void)
 	
 	show_config();
 	
-    LED_set_color(YELLOW, 1);
+    // LED_set_color(YELLOW, 1);
 
 
+// TODO: add back remote control logic (for now just doing phone app score control via ble)
+    // // Setup score A input and task
+    // xScoreAQueue = xQueueCreate(4, sizeof(uint32_t));
+    // if (xScoreAQueue != NULL) {
+    //     ESP_LOGI(SCOREA_TAG, "Score A queue created");
+    //     init_score_a_input();
+    //     xScoreAHoldTimer = xTimerCreate("ScoreAHold", pdMS_TO_TICKS(REMOTE_DECREMENT_HOLD_TIME), pdFALSE, NULL, score_a_hold_timer_callback);
+    //     if (xScoreAHoldTimer == NULL) {
+    //         ESP_LOGE(SCOREA_TAG, "Failed to create hold timer");
+    //     }
+    //     xScoreAResetTimer = xTimerCreate("ScoreAReset", pdMS_TO_TICKS(REMOTE_FULL_RESET_HOLD_TIME), pdFALSE, NULL, score_a_reset_timer_callback);
+    //     if (xScoreAResetTimer == NULL) {
+    //         ESP_LOGE(SCOREA_TAG, "Failed to create reset timer");
+    //     }
+    //     xTaskCreate(vScoreATask, "vScoreATask", 2048, NULL, 8, &xScoreATaskHandle);
+    //     ESP_LOGI(SCOREA_TAG, "Score A task created");
+    // } else {
+    //     ESP_LOGE(FIRM, "Failed to create score A queue");
+    // }
 
-    // Setup score A input and task
-    xScoreAQueue = xQueueCreate(4, sizeof(uint32_t));
-    if (xScoreAQueue != NULL) {
-        ESP_LOGI(SCOREA_TAG, "Score A queue created");
-        init_score_a_input();
-        xScoreAHoldTimer = xTimerCreate("ScoreAHold", pdMS_TO_TICKS(REMOTE_DECREMENT_HOLD_TIME), pdFALSE, NULL, score_a_hold_timer_callback);
-        if (xScoreAHoldTimer == NULL) {
-            ESP_LOGE(SCOREA_TAG, "Failed to create hold timer");
-        }
-        xScoreAResetTimer = xTimerCreate("ScoreAReset", pdMS_TO_TICKS(REMOTE_FULL_RESET_HOLD_TIME), pdFALSE, NULL, score_a_reset_timer_callback);
-        if (xScoreAResetTimer == NULL) {
-            ESP_LOGE(SCOREA_TAG, "Failed to create reset timer");
-        }
-        xTaskCreate(vScoreATask, "vScoreATask", 2048, NULL, 8, &xScoreATaskHandle);
-        ESP_LOGI(SCOREA_TAG, "Score A task created");
-    } else {
-        ESP_LOGE(FIRM, "Failed to create score A queue");
-    }
-
-    // Setup score B input and task
-    xScoreBQueue = xQueueCreate(4, sizeof(uint32_t));
-    if (xScoreBQueue != NULL) {
-        ESP_LOGI(SCOREB_TAG, "Score B queue created");
-        init_score_b_input();
-        xScoreBHoldTimer = xTimerCreate("ScoreBHold", pdMS_TO_TICKS(REMOTE_DECREMENT_HOLD_TIME), pdFALSE, NULL, score_b_hold_timer_callback);
-        if (xScoreBHoldTimer == NULL) {
-            ESP_LOGE(SCOREB_TAG, "Failed to create hold timer");
-        }
-        xScoreBResetTimer = xTimerCreate("ScoreBReset", pdMS_TO_TICKS(REMOTE_FULL_RESET_HOLD_TIME), pdFALSE, NULL, score_b_reset_timer_callback);
-        if (xScoreBResetTimer == NULL) {
-            ESP_LOGE(SCOREB_TAG, "Failed to create reset timer");
-        }
-        xTaskCreate(vScoreBTask, "vScoreBTask", 2048, NULL, 8, &xScoreBTaskHandle);
-        ESP_LOGI(SCOREB_TAG, "Score B task created");
-    } else {
-        ESP_LOGE(FIRM, "Failed to create score B queue");
-    }
+    // // Setup score B input and task
+    // xScoreBQueue = xQueueCreate(4, sizeof(uint32_t));
+    // if (xScoreBQueue != NULL) {
+    //     ESP_LOGI(SCOREB_TAG, "Score B queue created");
+    //     init_score_b_input();
+    //     xScoreBHoldTimer = xTimerCreate("ScoreBHold", pdMS_TO_TICKS(REMOTE_DECREMENT_HOLD_TIME), pdFALSE, NULL, score_b_hold_timer_callback);
+    //     if (xScoreBHoldTimer == NULL) {
+    //         ESP_LOGE(SCOREB_TAG, "Failed to create hold timer");
+    //     }
+    //     xScoreBResetTimer = xTimerCreate("ScoreBReset", pdMS_TO_TICKS(REMOTE_FULL_RESET_HOLD_TIME), pdFALSE, NULL, score_b_reset_timer_callback);
+    //     if (xScoreBResetTimer == NULL) {
+    //         ESP_LOGE(SCOREB_TAG, "Failed to create reset timer");
+    //     }
+    //     xTaskCreate(vScoreBTask, "vScoreBTask", 2048, NULL, 8, &xScoreBTaskHandle);
+    //     ESP_LOGI(SCOREB_TAG, "Score B task created");
+    // } else {
+    //     ESP_LOGE(FIRM, "Failed to create score B queue");
+    // }
 
         // DEBUG GPIO INPUTS
         // Main loop - print GPIO state every second
