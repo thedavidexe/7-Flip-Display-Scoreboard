@@ -34,16 +34,19 @@ class ScoreboardState {
     var actionLog: [ActionLogEntry] = []
 
     /// Build a 5-byte packet for BLE transmission
-    /// - Parameter slowTimerUpdates: Whether to use slow (10s) timer display updates
+    /// - Parameters:
+    ///   - slowTimerUpdates: Whether to use slow (10s) timer display updates
+    ///   - forceSegmentUpdate: Whether to force all segments to update (for reset/decrement)
     /// - Returns: 5-byte Data packet
-    func toPacket(slowTimerUpdates: Bool) -> Data {
-        var packet = Data(count: Constants.packetSize)
-        packet[Constants.PacketIndex.blueScore] = blueScore % 100
-        packet[Constants.PacketIndex.redScore] = redScore % 100
-        packet[Constants.PacketIndex.timerMinutes] = min(timerMinutes, Constants.maxTimerMinutes)
-        packet[Constants.PacketIndex.timerSeconds] = min(timerSeconds, Constants.maxTimerSeconds)
-        packet[Constants.PacketIndex.flags] = slowTimerUpdates ? Constants.PacketFlags.timerUpdateSlow : 0x00
-        return packet
+    func toPacket(slowTimerUpdates: Bool, forceSegmentUpdate: Bool = false) -> Data {
+        return PacketBuilder.buildPacket(
+            blueScore: blueScore,
+            redScore: redScore,
+            timerMinutes: timerMinutes,
+            timerSeconds: timerSeconds,
+            slowTimerUpdates: slowTimerUpdates,
+            forceSegmentUpdate: forceSegmentUpdate
+        )
     }
 
     /// Reset all scores and timer to zero

@@ -27,6 +27,7 @@
 		8E3FD0A52F085FB600486FB4 /* ScoreboardiOSApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ScoreboardiOSApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8E3FD0B42F085FB900486FB4 /* ScoreboardiOSAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ScoreboardiOSAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8E3FD0BE2F085FB900486FB4 /* ScoreboardiOSAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ScoreboardiOSAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8E5ECE402F094CA500635114 /* ScoreboardWatchApp.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = ScoreboardWatchApp.xcodeproj; path = ../ScoreboardWatchApp/ScoreboardWatchApp.xcodeproj; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -88,6 +89,7 @@
 		8E3FD09C2F085FB600486FB4 = {
 			isa = PBXGroup;
 			children = (
+				8E5ECE402F094CA500635114 /* ScoreboardWatchApp.xcodeproj */,
 				8E3FD0A72F085FB600486FB4 /* ScoreboardiOSApp */,
 				8E3FD0B72F085FB900486FB4 /* ScoreboardiOSAppTests */,
 				8E3FD0C12F085FB900486FB4 /* ScoreboardiOSAppUITests */,
@@ -101,6 +103,13 @@
 				8E3FD0A52F085FB600486FB4 /* ScoreboardiOSApp.app */,
 				8E3FD0B42F085FB900486FB4 /* ScoreboardiOSAppTests.xctest */,
 				8E3FD0BE2F085FB900486FB4 /* ScoreboardiOSAppUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8E5ECE432F094CA500635114 /* Products */ = {
+			isa = PBXGroup;
+			children = (
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -211,6 +220,12 @@
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8E3FD0A62F085FB600486FB4 /* Products */;
 			projectDirPath = "";
+			projectReferences = (
+				{
+					ProductGroup = 8E5ECE432F094CA500635114 /* Products */;
+					ProjectRef = 8E5ECE402F094CA500635114 /* ScoreboardWatchApp.xcodeproj */;
+				},
+			);
 			projectRoot = "";
 			targets = (
 				8E3FD0A42F085FB600486FB4 /* ScoreboardiOSApp */,

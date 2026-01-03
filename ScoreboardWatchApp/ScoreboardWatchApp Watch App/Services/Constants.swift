@@ -1,7 +1,7 @@
 import Foundation
 import CoreBluetooth
 
-/// Application-wide constants for the Scoreboard Controller
+/// Application-wide constants for the Scoreboard Watch App
 enum Constants {
     // MARK: - BLE UUIDs
     // Must match the ESP32 firmware UUIDs
@@ -36,13 +36,6 @@ enum Constants {
     static let maxScore: UInt8 = 99
     static let minScore: UInt8 = 0
 
-    // MARK: - Timer Limits
-    static let maxTimerMinutes: UInt8 = 99
-    static let maxTimerSeconds: UInt8 = 59
-
     // MARK: - Default Values
     static let defaultScoreIncrement = 1
-
-    // MARK: - Action Log
-    static let maxLogEntries = 100
 }

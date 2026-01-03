@@ -42,7 +42,7 @@ class ScoreboardViewModel {
         if state.blueScore > 0 {
             state.blueScore -= 1
             logAction(.blueScoreChange, "Blue -1 (now \(state.blueScore))")
-            sendCurrentState()
+            sendCurrentState(forceUpdate: true)
         }
     }
 
@@ -59,7 +59,7 @@ class ScoreboardViewModel {
         if state.redScore > 0 {
             state.redScore -= 1
             logAction(.redScoreChange, "Red -1 (now \(state.redScore))")
-            sendCurrentState()
+            sendCurrentState(forceUpdate: true)
         }
     }
 
@@ -83,7 +83,7 @@ class ScoreboardViewModel {
     func resetScores() {
         state.reset()
         logAction(.scoresReset, "Scores reset to 00-00")
-        sendCurrentState()
+        sendCurrentState(forceUpdate: true)
     }
 
     // MARK: - Timer Actions
@@ -111,10 +111,11 @@ class ScoreboardViewModel {
     // MARK: - BLE Communication
 
     /// Send the current state to the scoreboard
-    func sendCurrentState() {
+    /// - Parameter forceUpdate: If true, sets the force segment update flag to refresh all display segments
+    func sendCurrentState(forceUpdate: Bool = false) {
         guard isConnected else { return }
 
-        let packet = state.toPacket(slowTimerUpdates: settings.slowTimerUpdates)
+        let packet = state.toPacket(slowTimerUpdates: settings.slowTimerUpdates, forceSegmentUpdate: forceUpdate)
         Task {
             let success = await bleManager.sendPacket(packet)
             if !success {

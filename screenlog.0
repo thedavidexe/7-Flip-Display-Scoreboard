@@ -25615,3 +25615,641 @@ I (228) boot: Disabling RNG early entropy source...
 [0;32mI (522833) SCORE_A: GPIO 32 state: 1[0m
 [0;32mI (522933) SCORE_B: GPIO 4 state: 1[0m
 [0;32mI (523033) SCORE_A: GPIO 32 state: 1[0m
+x<ðx ‡xü€x €€xÀx<x üx €€€€xÀ€ €€€€ €x ÀxÀ€ €x À€€€€ø€€€€x ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:6380
+ho 0 tail 12 room 4
+load:0x40078000,len:15916
+load:0x40080400,len:3860
+entry 0x40080638
+I (29) boot: ESP-IDF v5.5 2nd stage bootloader
+I (29) boot: compile time Jan  2 2026 15:21:48
+I (29) boot: Multicore bootloader
+I (30) boot: chip revision: v3.1
+I (33) boot.esp32: SPI Speed      : 40MHz
+I (37) boot.esp32: SPI Mode       : DIO
+I (40) boot.esp32: SPI Flash Size : 2MB
+I (44) boot: Enabling RNG early entropy source...
+I (49) boot: Partition Table:
+I (51) boot: ## Label            Usage          Type ST Offset   Length
+I (57) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (64) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (71) boot:  2 factory          factory app      00 00 00010000 00100000
+I (77) boot: End of partition table
+I (80) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=13e14h ( 81428) map
+I (116) esp_image: segment 1: paddr=00023e3c vaddr=3ff80000 size=00020h (    32) load
+I (116) esp_image: segment 2: paddr=00023e64 vaddr=3ffbdb60 size=04924h ( 18724) load
+I (126) esp_image: segment 3: paddr=00028790 vaddr=40080000 size=07888h ( 30856) load
+I (139) esp_image: segment 4: paddr=00030020 vaddr=400d0020 size=54454h (345172) map
+I (257) esp_image: segment 5: paddr=0008447c vaddr=40087888 size=10ecch ( 69324) load
+I (297) boot: Loaded app from partition at offset 0x10000
+I (297) boot: Disabling RNG early entropy source...
+I (307) cpu_start: Multicore app
+I (316) cpu_start: Pro cpu start user code
+I (316) cpu_start: cpu freq: 160000000 Hz
+I (316) app_init: Application information:
+I (316) app_init: Project name:     main
+I (319) app_init: App version:      1f9a7cd-dirty
+I (324) app_init: Compile time:     Jan  2 2026 15:21:40
+I (329) app_init: ELF file SHA256:  15655dd6e...
+I (333) app_init: ESP-IDF:          v5.5
+I (337) efuse_init: Min chip rev:     v0.0
+I (341) efuse_init: Max chip rev:     v3.99 
+I (345) efuse_init: Chip rev:         v3.1
+I (349) heap_init: Initializing. RAM available for dynamic allocation:
+I (355) heap_init: At 3FFAFF10 len 000000F0 (0 KiB): DRAM
+I (360) heap_init: At 3FFB6388 len 00001C78 (7 KiB): DRAM
+I (365) heap_init: At 3FFB9A20 len 00004108 (16 KiB): DRAM
+I (370) heap_init: At 3FFC6B68 len 00019498 (101 KiB): DRAM
+I (375) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM
+I (381) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM
+I (386) heap_init: At 40098754 len 000078AC (30 KiB): IRAM
+I (393) spi_flash: detected chip: generic
+I (395) spi_flash: flash io: dio
+W (398) spi_flash: Detected size(8192k) larger than the size in the binary image header(2048k). Using the size in the binary image header.
+W (410) i2c: This driver is an old driver, please migrate your application code to adapt `driver/i2c_master.h`
+I (421) coexist: coex firmware version: 831ec70
+I (425) main_task: Started on CPU0
+I (435) main_task: Calling app_main()
+I (435) FIRMWARE: Version: 0.1.1
+I (575) DISP: Display count: 4
+I (575) CONFIG: Initialize `status` with default values...
+I (575) CONFIG: Hardcoded groups: [0-1] and [2-3]
+I (575) CONFIG: Printing config file..
+I (575) CONFIG: total_groups: 2
+I (575) CONFIG: display_number: 4
+I (585) CONFIG: led: 0
+I (585) CONFIG: timezone: 
+I (585) CONFIG: groups[0].mode: 0
+I (585) CONFIG: groups[1].mode: 0
+I (595) CONFIG: groups[2].mode: 0
+I (595) CONFIG: groups[3].mode: 0
+I (595) BLE_SCOREBOARD: Initializing BLE scoreboard service
+I (605) BTDM_INIT: BT controller compile version [b992c7d]
+I (605) BTDM_INIT: Bluetooth MAC: 04:83:08:23:23:9e
+I (615) phy_init: phy_version 4860,6b7a6e5,Feb  6 2025,14:47:07
+E (615) phy_init: esp_phy_load_cal_data_from_nvs: NVS has not been initialized. Call nvs_flash_init before starting WiFi/BT.
+W (625) phy_init: failed to load RF calibration data (0x1101), falling back to full calibration
+I (705) phy_init: Saving new calibration data due to checksum failure or outdated calibration data, mode(2)
+I (935) BLE_SCOREBOARD: Generated Hardware ID: 6H01
+I (935) BLE_SCOREBOARD: BLE host task started
+I (945) BLE_SCOREBOARD: BLE scoreboard service initialized
+I (985) NimBLE: Failed to restore IRKs from store; status=8
+
+I (985) BLE_SCOREBOARD: BLE Address: 04:83:08:23:23:9e
+I (985) BLE_SCOREBOARD: No existing bonds to clear
+I (985) BLE_SCOREBOARD: Generated Hardware ID: 6H01
+I (995) BLE_SCOREBOARD: Displaying Hardware ID: 6H01
+I (4595) NimBLE: GAP procedure initiated: advertise; 
+I (4595) NimBLE: disc_mode=2
+I (4595) NimBLE:  adv_channel_map=0 own_addr_type=0 adv_filter_policy=0 adv_itvl_min=160 adv_itvl_max=240
+I (4605) NimBLE: 
+
+I (4615) BLE_SCOREBOARD: BLE advertising started as 'Scoreboard 6H01'
+I (5985) BLE_SCOREBOARD: Connection established; status=0
+I (5985) BLE_SCOREBOARD: First connection - ready for commands
+I (6115) BLE_SCOREBOARD: MTU update event; conn_handle=0, mtu=256
+I (6465) BLE_SCOREBOARD: Subscribe event; cur_indicate=1, val_handle=16
+I (6855) BLE_SCOREBOARD: Subscribe event; cur_indicate=1, val_handle=16
+I (6945) BLE_SCOREBOARD: Write received, len=5
+I (6955) BLE_SCOREBOARD: Packet: Blue=0, Red=0, Timer=00:00, SlowUpdate=0
+I (6955) BLE_SCOREBOARD: Entering score mode: Blue=0, Red=0
+ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:6380
+ho 0 tail 12 room 4
+load:0x40078000,len:15916
+load:0x40080400,len:3860
+entry 0x40080638
+I (29) boot: ESP-IDF v5.5 2nd stage bootloader
+I (29) boot: compile time Jan  2 2026 15:21:48
+I (29) boot: Multicore bootloader
+I (30) boot: chip revision: v3.1
+I (33) boot.esp32: SPI Speed      : 40MHz
+I (37) boot.esp32: SPI Mode       : DIO
+I (40) boot.esp32: SPI Flash Size : 2MB
+I (44) boot: Enabling RNG early entropy source...
+I (49) boot: Partition Table:
+I (51) boot: ## Label            Usage          Type ST Offset   Length
+I (57) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (64) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (71) boot:  2 factory          factory app      00 00 00010000 00100000
+I (77) boot: End of partition table
+I (80) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=13e14h ( 81428) map
+I (116) esp_image: segment 1: paddr=00023e3c vaddr=3ff80000 size=00020h (    32) load
+I (116) esp_image: segment 2: paddr=00023e64 vaddr=3ffbdb60 size=04924h ( 18724) load
+I (126) esp_image: segment 3: paddr=00028790 vaddr=40080000 size=07888h ( 30856) load
+I (139) esp_image: segment 4: paddr=00030020 vaddr=400d0020 size=54454h (345172) map
+I (257) esp_image: segment 5: paddr=0008447c vaddr=40087888 size=10ecch ( 69324) load
+I (297) boot: Loaded app from partition at offset 0x10000
+I (297) boot: Disabling RNG early entropy source...
+I (307) cpu_start: Multicore app
+I (316) cpu_start: Pro cpu start user code
+I (316) cpu_start: cpu freq: 160000000 Hz
+I (316) app_init: Application information:
+I (316) app_init: Project name:     main
+I (319) app_init: App version:      1f9a7cd-dirty
+I (324) app_init: Compile time:     Jan  2 2026 15:21:40
+I (329) app_init: ELF file SHA256:  15655dd6e...
+I (333) app_init: ESP-IDF:          v5.5
+I (337) efuse_init: Min chip rev:     v0.0
+I (341) efuse_init: Max chip rev:     v3.99 
+I (345) efuse_init: Chip rev:         v3.1
+I (349) heap_init: Initializing. RAM available for dynamic allocation:
+I (355) heap_init: At 3FFAFF10 len 000000F0 (0 KiB): DRAM
+I (360) heap_init: At 3FFB6388 len 00001C78 (7 KiB): DRAM
+I (365) heap_init: At 3FFB9A20 len 00004108 (16 KiB): DRAM
+I (370) heap_init: At 3FFC6B68 len 00019498 (101 KiB): DRAM
+I (375) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM
+I (381) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM
+I (386) heap_init: At 40098754 len 000078AC (30 KiB): IRAM
+I (393) spi_flash: detected chip: generic
+I (395) spi_flash: flash io: dio
+W (398) spi_flash: Detected size(8192k) larger than the size in the binary image header(2048k). Using the size in the binary image header.
+W (410) i2c: This driver is an old driver, please migrate your application code to adapt `driver/i2c_master.h`
+I (421) coexist: coex firmware version: 831ec70
+I (425) main_task: Started on CPU0
+I (435) main_task: Calling app_main()
+I (435) FIRMWARE: Version: 0.1.1
+I (575) DISP: Display count: 4
+I (575) CONFIG: Initialize `status` with default values...
+I (575) CONFIG: Hardcoded groups: [0-1] and [2-3]
+I (575) CONFIG: Printing config file..
+I (575) CONFIG: total_groups: 2
+I (575) CONFIG: display_number: 4
+I (585) CONFIG: led: 0
+I (585) CONFIG: timezone: 
+I (585) CONFIG: groups[0].mode: 0
+I (585) CONFIG: groups[1].mode: 0
+I (595) CONFIG: groups[2].mode: 0
+I (595) CONFIG: groups[3].mode: 0
+I (595) BLE_SCOREBOARD: Initializing BLE scoreboard service
+I (605) BTDM_INIT: BT controller compile version [b992c7d]
+I (605) BTDM_INIT: Bluetooth MAC: 04:83:08:23:23:9e
+I (615) phy_init: phy_version 4860,6b7a6e5,Feb  6 2025,14:47:07
+E (615) phy_init: esp_phy_load_cal_data_from_nvs: NVS has not been initialized. Call nvs_flash_init before starting WiFi/BT.
+W (625) phy_init: failed to load RF calibration data (0x1101), falling back to full calibration
+I (705) phy_init: Saving new calibration data due to checksum failure or outdated calibration data, mode(2)
+I (945) BLE_SCOREBOARD: Generated Hardware ID: 6H01
+I (945) BLE_SCOREBOARD: BLE host task started
+I (945) BLE_SCOREBOARD: BLE scoreboard service initialized
+I (995) NimBLE: Failed to restore IRKs from store; status=8
+
+I (995) BLE_SCOREBOARD: BLE Address: 04:83:08:23:23:9e
+I (995) BLE_SCOREBOARD: No existing bonds to clear
+I (995) BLE_SCOREBOARD: Generated Hardware ID: 6H01
+I (995) BLE_SCOREBOARD: Displaying Hardware ID: 6H01
+I (4605) NimBLE: GAP procedure initiated: advertise; 
+I (4605) NimBLE: disc_mode=2
+I (4605) NimBLE:  adv_channel_map=0 own_addr_type=0 adv_filter_policy=0 adv_itvl_min=160 adv_itvl_max=240
+I (4615) NimBLE: 
+
+I (4625) BLE_SCOREBOARD: BLE advertising started as 'Scoreboard 6H01'
+I (4875) BLE_SCOREBOARD: Connection established; status=0
+I (4875) BLE_SCOREBOARD: First connection - ready for commands
+I (4995) BLE_SCOREBOARD: MTU update event; conn_handle=0, mtu=256
+I (5295) BLE_SCOREBOARD: Subscribe event; cur_indicate=1, val_handle=16
+I (5625) BLE_SCOREBOARD: Subscribe event; cur_indicate=1, val_handle=16
+I (5685) BLE_SCOREBOARD: Write received, len=5
+I (5685) BLE_SCOREBOARD: Packet: Blue=0, Red=0, Timer=00:00, SlowUpdate=0
+I (5685) BLE_SCOREBOARD: Entering score mode: Blue=0, Red=0
+ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:6380
+ho 0 tail 12 room 4
+load:0x40078000,len:15916
+load:0x40080400,len:3860
+entry 0x40080638
+I (29) boot: ESP-IDF v5.5 2nd stage bootloader
+I (29) boot: compile time Jan  2 2026 15:21:48
+I (29) boot: Multicore bootloader
+I (30) boot: chip revision: v3.1
+I (33) boot.esp32: SPI Speed      : 40MHz
+I (37) boot.esp32: SPI Mode       : DIO
+I (40) boot.esp32: SPI Flash Size : 2MB
+I (44) boot: Enabling RNG early entropy source...
+I (49) boot: Partition Table:
+I (51) boot: ## Label            Usage          Type ST Offset   Length
+I (57) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (64) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (71) boot:  2 factory          factory app      00 00 00010000 00100000
+I (77) boot: End of partition table
+I (80) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=13e14h ( 81428) map
+I (116) esp_image: segment 1: paddr=00023e3c vaddr=3ff80000 size=00020h (    32) load
+I (116) esp_image: segment 2: paddr=00023e64 vaddr=3ffbdb60 size=04924h ( 18724) load
+I (126) esp_image: segment 3: paddr=00028790 vaddr=40080000 size=07888h ( 30856) load
+I (139) esp_image: segment 4: paddr=00030020 vaddr=400d0020 size=54454h (345172) map
+I (257) esp_image: segment 5: paddr=0008447c vaddr=40087888 size=10ecch ( 69324) load
+I (297) boot: Loaded app from partition at offset 0x10000
+I (297) boot: Disabling RNG early entropy source...
+I (307) cpu_start: Multicore app
+I (316) cpu_start: Pro cpu start user code
+I (316) cpu_start: cpu freq: 160000000 Hz
+I (316) app_init: Application information:
+I (316) app_init: Project name:     main
+I (319) app_init: App version:      1f9a7cd-dirty
+I (324) app_init: Compile time:     Jan  2 2026 15:21:40
+I (329) app_init: ELF file SHA256:  15655dd6e...
+I (333) app_init: ESP-IDF:          v5.5
+I (337) efuse_init: Min chip rev:     v0.0
+I (341) efuse_init: Max chip rev:     v3.99 
+I (345) efuse_init: Chip rev:         v3.1
+I (349) heap_init: Initializing. RAM available for dynamic allocation:
+I (355) heap_init: At 3FFAFF10 len 000000F0 (0 KiB): DRAM
+I (360) heap_init: At 3FFB6388 len 00001C78 (7 KiB): DRAM
+I (365) heap_init: At 3FFB9A20 len 00004108 (16 KiB): DRAM
+I (370) heap_init: At 3FFC6B68 len 00019498 (101 KiB): DRAM
+I (375) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM
+I (381) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM
+I (386) heap_init: At 40098754 len 000078AC (30 KiB): IRAM
+I (393) spi_flash: detected chip: generic
+I (395) spi_flash: flash io: dio
+W (398) spi_flash: Detected size(8192k) larger than the size in the binary image header(2048k). Using the size in the binary image header.
+W (410) i2c: This driver is an old driver, please migrate your application code to adapt `driver/i2c_master.h`
+I (421) coexist: coex firmware version: 831ec70
+I (425) main_task: Started on CPU0
+I (435) main_task: Calling app_main()
+I (435) FIRMWARE: Version: 0.1.1
+I (575) DISP: Display count: 4
+I (575) CONFIG: Initialize `status` with default values...
+I (575) CONFIG: Hardcoded groups: [0-1] and [2-3]
+I (575) CONFIG: Printing config file..
+I (575) CONFIG: total_groups: 2
+I (575) CONFIG: display_number: 4
+I (585) CONFIG: led: 0
+I (585) CONFIG: timezone: 
+I (585) CONFIG: groups[0].mode: 0
+I (585) CONFIG: groups[1].mode: 0
+I (595) CONFIG: groups[2].mode: 0
+I (595) CONFIG: groups[3].mode: 0
+I (595) BLE_SCOREBOARD: Initializing BLE scoreboard service
+I (605) BTDM_INIT: BT controller compile version [b992c7d]
+I (605) BTDM_INIT: Bluetooth MAC: 04:83:08:23:23:9e
+I (615) phy_init: phy_version 4860,6b7a6e5,Feb  6 2025,14:47:07
+E (615) phy_init: esp_phy_load_cal_data_from_nvs: NVS has not been initialized. Call nvs_flash_init before starting WiFi/BT.
+W (625) phy_init: failed to load RF calibration data (0x1101), falling back to full calibration
+I (705) phy_init: Saving new calibration data due to checksum failure or outdated calibration data, mode(2)
+I (945) BLE_SCOREBOARD: Generated Hardware ID: 6H01
+I (945) BLE_SCOREBOARD: BLE host task started
+I (945) BLE_SCOREBOARD: BLE scoreboard service initialized
+I (985) NimBLE: Failed to restore IRKs from store; status=8
+
+I (995) BLE_SCOREBOARD: BLE Address: 04:83:08:23:23:9e
+I (995) BLE_SCOREBOARD: No existing bonds to clear
+I (995) BLE_SCOREBOARD: Generated Hardware ID: 6H01
+I (995) BLE_SCOREBOARD: Displaying Hardware ID: 6H01
+I (4605) NimBLE: GAP procedure initiated: advertise; 
+I (4605) NimBLE: disc_mode=2
+I (4605) NimBLE:  adv_channel_map=0 own_addr_type=0 adv_filter_policy=0 adv_itvl_min=160 adv_itvl_max=240
+I (4615) NimBLE: 
+
+I (4625) BLE_SCOREBOARD: BLE advertising started as 'Scoreboard 6H01'
+I (5075) BLE_SCOREBOARD: Connection established; status=0
+I (5075) BLE_SCOREBOARD: First connection - ready for commands
+I (5225) BLE_SCOREBOARD: MTU update event; conn_handle=0, mtu=256
+I (5555) BLE_SCOREBOARD: Subscribe event; cur_indicate=1, val_handle=16
+I (5915) BLE_SCOREBOARD: Subscribe event; cur_indicate=1, val_handle=16
+I (6005) BLE_SCOREBOARD: Write received, len=5
+I (6005) BLE_SCOREBOARD: Packet: Blue=0, Red=0, Timer=00:00, SlowUpdate=0
+I (6005) BLE_SCOREBOARD: Entering score mode: Blue=0, Red=0
+ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:6380
+ho 0 tail 12 room 4
+load:0x40078000,len:15916
+load:0x40080400,len:3860
+entry 0x40080638
+I (29) boot: ESP-IDF v5.5 2nd stage bootloader
+I (29) boot: compile time Jan  2 2026 15:21:48
+I (29) boot: Multicore bootloader
+I (30) boot: chip revision: v3.1
+I (33) boot.esp32: SPI Speed      : 40MHz
+I (37) boot.esp32: SPI Mode       : DIO
+I (40) boot.esp32: SPI Flash Size : 2MB
+I (44) boot: Enabling RNG early entropy source...
+I (49) boot: Partition Table:
+I (51) boot: ## Label            Usage          Type ST Offset   Length
+I (57) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (64) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (71) boot:  2 factory          factory app      00 00 00010000 00100000
+I (77) boot: End of partition table
+I (80) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=13e14h ( 81428) map
+I (116) esp_image: segment 1: paddr=00023e3c vaddr=3ff80000 size=00020h (    32) load
+I (116) esp_image: segment 2: paddr=00023e64 vaddr=3ffbdb60 size=04924h ( 18724) load
+I (126) esp_image: segment 3: paddr=00028790 vaddr=40080000 size=07888h ( 30856) load
+I (139) esp_image: segment 4: paddr=00030020 vaddr=400d0020 size=54454h (345172) map
+I (257) esp_image: segment 5: paddr=0008447c vaddr=40087888 size=10ecch ( 69324) load
+I (297) boot: Loaded app from partition at offset 0x10000
+I (297) boot: Disabling RNG early entropy source...
+I (307) cpu_start: Multicore app
+I (316) cpu_start: Pro cpu start user code
+I (316) cpu_start: cpu freq: 160000000 Hz
+I (316) app_init: Application information:
+I (316) app_init: Project name:     main
+I (319) app_init: App version:      1f9a7cd-dirty
+I (324) app_init: Compile time:     Jan  2 2026 15:21:40
+I (329) app_init: ELF file SHA256:  15655dd6e...
+I (333) app_init: ESP-IDF:          v5.5
+I (337) efuse_init: Min chip rev:     v0.0
+I (341) efuse_init: Max chip rev:     v3.99 
+I (345) efuse_init: Chip rev:         v3.1
+I (349) heap_init: Initializing. RAM available for dynamic allocation:
+I (355) heap_init: At 3FFAFF10 len 000000F0 (0 KiB): DRAM
+I (360) heap_init: At 3FFB6388 len 00001C78 (7 KiB): DRAM
+I (365) heap_init: At 3FFB9A20 len 00004108 (16 KiB): DRAM
+I (370) heap_init: At 3FFC6B68 len 00019498 (101 KiB): DRAM
+I (375) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM
+I (381) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM
+I (386) heap_init: At 40098754 len 000078AC (30 KiB): IRAM
+I (393) spi_flash: detected chip: generic
+I (395) spi_flash: flash io: dio
+W (398) spi_flash: Detected size(8192k) larger than the size in the binary image header(2048k). Using the size in the binary image header.
+W (410) i2c: This driver is an old driver, please migrate your application code to adapt `driver/i2c_master.h`
+I (421) coexist: coex firmware version: 831ec70
+I (425) main_task: Started on CPU0
+I (435) main_task: Calling app_main()
+I (435) FIRMWARE: Version: 0.1.1
+I (575) DISP: Display count: 4
+I (575) CONFIG: Initialize `status` with default values...
+I (575) CONFIG: Hardcoded groups: [0-1] and [2-3]
+I (575) CONFIG: Printing config file..
+I (575) CONFIG: total_groups: 2
+I (575) CONFIG: display_number: 4
+I (585) CONFIG: led: 0
+I (585) CONFIG: timezone: 
+I (585) CONFIG: groups[0].mode: 0
+I (585) CONFIG: groups[1].mode: 0
+I (595) CONFIG: groups[2].mode: 0
+I (595) CONFIG: groups[3].mode: 0
+I (595) BLE_SCOREBOARD: Initializing BLE scoreboard service
+I (605) BTDM_INIT: BT controller compile version [b992c7d]
+I (605) BTDM_INIT: Bluetooth MAC: 04:83:08:23:23:9e
+I (615) phy_init: phy_version 4860,6b7a6e5,Feb  6 2025,14:47:07
+E (615) phy_init: esp_phy_load_cal_data_from_nvs: NVS has not been initialized. Call nvs_flash_init before starting WiFi/BT.
+W (625) phy_init: failed to load RF calibration data (0x1101), falling back to full calibration
+I (705) phy_init: Saving new calibration data due to checksum failure or outdated calibration data, mode(2)
+I (955) BLE_SCOREBOARD: Generated Hardware ID: 6H01
+I (955) BLE_SCOREBOARD: BLE host task started
+I (955) BLE_SCOREBOARD: BLE scoreboard service initialized
+I (995) NimBLE: Failed to restore IRKs from store; status=8
+
+I (995) BLE_SCOREBOARD: BLE Address: 04:83:08:23:23:9e
+I (995) BLE_SCOREBOARD: No existing bonds to clear
+I (1005) BLE_SCOREBOARD: Generated Hardware ID: 6H01
+I (1005) BLE_SCOREBOARD: Displaying Hardware ID: 6H01
+I (4615) NimBLE: GAP procedure initiated: advertise; 
+I (4615) NimBLE: disc_mode=2
+I (4615) NimBLE:  adv_channel_map=0 own_addr_type=0 adv_filter_policy=0 adv_itvl_min=160 adv_itvl_max=240
+I (4625) NimBLE: 
+
+I (4635) BLE_SCOREBOARD: BLE advertising started as 'Scoreboard 6H01'
+I (6295) BLE_SCOREBOARD: Connection established; status=0
+I (6295) BLE_SCOREBOARD: First connection - ready for commands
+I (6455) BLE_SCOREBOARD: MTU update event; conn_handle=0, mtu=256
+I (6745) BLE_SCOREBOARD: Subscribe event; cur_indicate=1, val_handle=16
+I (7045) BLE_SCOREBOARD: Subscribe event; cur_indicate=1, val_handle=16
+I (7105) BLE_SCOREBOARD: Write received, len=5
+I (7105) BLE_SCOREBOARD: Packet: Blue=0, Red=0, Timer=00:00, SlowUpdate=0
+I (7105) BLE_SCOREBOARD: Entering score mode: Blue=0, Red=0
+I (33175) BLE_SCOREBOARD: Subscribe event; cur_indicate=0, val_handle=16
+I (33175) BLE_SCOREBOARD: Subscribe event; cur_indicate=0, val_handle=16
+I (33185) BLE_SCOREBOARD: Disconnected; reason=531
+I (33195) NimBLE: GAP procedure initiated: advertise; 
+I (33195) NimBLE: disc_mode=2
+I (33195) NimBLE:  adv_channel_map=0 own_addr_type=0 adv_filter_policy=0 adv_itvl_min=160 adv_itvl_max=240
+I (33205) NimBLE: 
+
+I (33205) BLE_SCOREBOARD: BLE advertising started as 'Scoreboard 6H01'
+ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:6380
+ho 0 tail 12 room 4
+load:0x40078000,len:15916
+load:0x40080400,len:3860
+entry 0x40080638
+I (29) boot: ESP-IDF v5.5 2nd stage bootloader
+I (29) boot: compile time Jan  2 2026 15:21:48
+I (29) boot: Multicore bootloader
+I (30) boot: chip revision: v3.1
+I (33) boot.esp32: SPI Speed      : 40MHz
+I (37) boot.esp32: SPI Mode       : DIO
+I (40) boot.esp32: SPI Flash Size : 2MB
+I (44) boot: Enabling RNG early entropy source...
+I (49) boot: Partition Table:
+I (51) boot: ## Label            Usage          Type ST Offset   Length
+I (57) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (64) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (71) boot:  2 factory          factory app      00 00 00010000 00100000
+I (77) boot: End of partition table
+I (80) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=13e14h ( 81428) map
+I (116) esp_image: segment 1: paddr=00023e3c vaddr=3ff80000 size=00020h (    32) load
+I (116) esp_image: segment 2: paddr=00023e64 vaddr=3ffbdb60 size=04924h ( 18724) load
+I (126) esp_image: segment 3: paddr=00028790 vaddr=40080000 size=07888h ( 30856) load
+I (139) esp_image: segment 4: paddr=00030020 vaddr=400d0020 size=54454h (345172) map
+I (257) esp_image: segment 5: paddr=0008447c vaddr=40087888 size=10ecch ( 69324) load
+I (297) boot: Loaded app from partition at offset 0x10000
+I (297) boot: Disabling RNG early entropy source...
+I (307) cpu_start: Multicore app
+I (316) cpu_start: Pro cpu start user code
+I (316) cpu_start: cpu freq: 160000000 Hz
+I (316) app_init: Application information:
+I (316) app_init: Project name:     main
+I (319) app_init: App version:      1f9a7cd-dirty
+I (324) app_init: Compile time:     Jan  2 2026 15:21:40
+I (329) app_init: ELF file SHA256:  15655dd6e...
+I (333) app_init: ESP-IDF:          v5.5
+I (337) efuse_init: Min chip rev:     v0.0
+I (341) efuse_init: Max chip rev:     v3.99 
+I (345) efuse_init: Chip rev:         v3.1
+I (349) heap_init: Initializing. RAM available for dynamic allocation:
+I (355) heap_init: At 3FFAFF10 len 000000F0 (0 KiB): DRAM
+I (360) heap_init: At 3FFB6388 len 00001C78 (7 KiB): DRAM
+I (365) heap_init: At 3FFB9A20 len 00004108 (16 KiB): DRAM
+I (370) heap_init: At 3FFC6B68 len 00019498 (101 KiB): DRAM
+I (375) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM
+I (381) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM
+I (386) heap_init: At 40098754 len 000078AC (30 KiB): IRAM
+I (393) spi_flash: detected chip: generic
+I (395) spi_flash: flash io: dio
+W (398) spi_flash: Detected size(8192k) larger than the size in the binary image header(2048k). Using the size in the binary image header.
+W (410) i2c: This driver is an old driver, please migrate your application code to adapt `driver/i2c_master.h`
+I (421) coexist: coex firmware version: 831ec70
+I (425) main_task: Started on CPU0
+I (435) main_task: Calling app_main()
+I (435) FIRMWARE: Version: 0.1.1
+I (575) DISP: Display count: 4
+I (575) CONFIG: Initialize `status` with default values...
+I (575) CONFIG: Hardcoded groups: [0-1] and [2-3]
+I (575) CONFIG: Printing config file..
+I (575) CONFIG: total_groups: 2
+I (575) CONFIG: display_number: 4
+I (585) CONFIG: led: 0
+I (585) CONFIG: timezone: 
+I (585) CONFIG: groups[0].mode: 0
+I (585) CONFIG: groups[1].mode: 0
+I (595) CONFIG: groups[2].mode: 0
+I (595) CONFIG: groups[3].mode: 0
+I (595) BLE_SCOREBOARD: Initializing BLE scoreboard service
+I (605) BTDM_INIT: BT controller compile version [b992c7d]
+I (605) BTDM_INIT: Bluetooth MAC: 04:83:08:23:23:9e
+I (615) phy_init: phy_version 4860,6b7a6e5,Feb  6 2025,14:47:07
+E (615) phy_init: esp_phy_load_cal_data_from_nvs: NVS has not been initialized. Call nvs_flash_init before starting WiFi/BT.
+W (625) phy_init: failed to load RF calibration data (0x1101), falling back to full calibration
+I (705) phy_init: Saving new calibration data due to checksum failure or outdated calibration data, mode(2)
+I (955) BLE_SCOREBOARD: Generated Hardware ID: 6H01
+I (955) BLE_SCOREBOARD: BLE host task started
+I (955) BLE_SCOREBOARD: BLE scoreboard service initialized
+I (995) NimBLE: Failed to restore IRKs from store; status=8
+
+I (995) BLE_SCOREBOARD: BLE Address: 04:83:08:23:23:9e
+I (995) BLE_SCOREBOARD: No existing bonds to clear
+I (995) BLE_SCOREBOARD: Generated Hardware ID: 6H01
+I (1005) BLE_SCOREBOARD: Displaying Hardware ID: 6H01
+I (4605) NimBLE: GAP procedure initiated: advertise; 
+I (4605) NimBLE: disc_mode=2
+I (4605) NimBLE:  adv_channel_map=0 own_addr_type=0 adv_filter_policy=0 adv_itvl_min=160 adv_itvl_max=240
+I (4615) NimBLE: 
+
+I (4625) BLE_SCOREBOARD: BLE advertising started as 'Scoreboard 6H01'
+ets Jul 29 2019 12:21:46
+
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:6380
+ho 0 tail 12 room 4
+load:0x40078000,len:15916
+load:0x40080400,len:3860
+entry 0x40080638
+I (29) boot: ESP-IDF v5.5 2nd stage bootloader
+I (29) boot: compile time Jan  2 2026 15:21:48
+I (29) boot: Multicore bootloader
+I (30) boot: chip revision: v3.1
+I (33) boot.esp32: SPI Speed      : 40MHz
+I (37) boot.esp32: SPI Mode       : DIO
+I (40) boot.esp32: SPI Flash Size : 2MB
+I (44) boot: Enabling RNG early entropy source...
+I (49) boot: Partition Table:
+I (51) boot: ## Label            Usage          Type ST Offset   Length
+I (57) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (64) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (71) boot:  2 factory          factory app      00 00 00010000 00100000
+I (77) boot: End of partition table
+I (80) esp_image: segment 0: paddr=00010020 vaddr=3f400020 size=13e14h ( 81428) map
+I (116) esp_image: segment 1: paddr=00023e3c vaddr=3ff80000 size=00020h (    32) load
+I (116) esp_image: segment 2: paddr=00023e64 vaddr=3ffbdb60 size=04924h ( 18724) load
+I (126) esp_image: segment 3: paddr=00028790 vaddr=40080000 size=07888h ( 30856) load
+I (139) esp_image: segment 4: paddr=00030020 vaddr=400d0020 size=54454h (345172) map
+I (257) esp_image: segment 5: paddr=0008447c vaddr=40087888 size=10ecch ( 69324) load
+I (297) boot: Loaded app from partition at offset 0x10000
+I (297) boot: Disabling RNG early entropy source...
+I (307) cpu_start: Multicore app
+I (316) cpu_start: Pro cpu start user code
+I (316) cpu_start: cpu freq: 160000000 Hz
+I (316) app_init: Application information:
+I (316) app_init: Project name:     main
+I (319) app_init: App version:      1f9a7cd-dirty
+I (324) app_init: Compile time:     Jan  2 2026 15:21:40
+I (329) app_init: ELF file SHA256:  15655dd6e...
+I (333) app_init: ESP-IDF:          v5.5
+I (337) efuse_init: Min chip rev:     v0.0
+I (341) efuse_init: Max chip rev:     v3.99 
+I (345) efuse_init: Chip rev:         v3.1
+I (349) heap_init: Initializing. RAM available for dynamic allocation:
+I (355) heap_init: At 3FFAFF10 len 000000F0 (0 KiB): DRAM
+I (360) heap_init: At 3FFB6388 len 00001C78 (7 KiB): DRAM
+I (365) heap_init: At 3FFB9A20 len 00004108 (16 KiB): DRAM
+I (370) heap_init: At 3FFC6B68 len 00019498 (101 KiB): DRAM
+I (375) heap_init: At 3FFE0440 len 00003AE0 (14 KiB): D/IRAM
+I (381) heap_init: At 3FFE4350 len 0001BCB0 (111 KiB): D/IRAM
+I (386) heap_init: At 40098754 len 000078AC (30 KiB): IRAM
+I (393) spi_flash: detected chip: generic
+I (395) spi_flash: flash io: dio
+W (398) spi_flash: Detected size(8192k) larger than the size in the binary image header(2048k). Using the size in the binary image header.
+W (410) i2c: This driver is an old driver, please migrate your application code to adapt `driver/i2c_master.h`
+I (421) coexist: coex firmware version: 831ec70
+I (425) main_task: Started on CPU0
+I (435) main_task: Calling app_main()
+I (435) FIRMWARE: Version: 0.1.1
+I (575) DISP: Display count: 4
+I (575) CONFIG: Initialize `status` with default values...
+I (575) CONFIG: Hardcoded groups: [0-1] and [2-3]
+I (575) CONFIG: Printing config file..
+I (575) CONFIG: total_groups: 2
+I (575) CONFIG: display_number: 4
+I (585) CONFIG: led: 0
+I (585) CONFIG: timezone: 
+I (585) CONFIG: groups[0].mode: 0
+I (585) CONFIG: groups[1].mode: 0
+I (595) CONFIG: groups[2].mode: 0
+I (595) CONFIG: groups[3].mode: 0
+I (595) BLE_SCOREBOARD: Initializing BLE scoreboard service
+I (605) BTDM_INIT: BT controller compile version [b992c7d]
+I (605) BTDM_INIT: Bluetooth MAC: 04:83:08:23:23:9e
+I (615) phy_init: phy_version 4860,6b7a6e5,Feb  6 2025,14:47:07
+E (615) phy_init: esp_phy_load_cal_data_from_nvs: NVS has not been initialized. Call nvs_flash_init before starting WiFi/BT.
+W (625) phy_init: failed to load RF calibration data (0x1101), falling back to full calibration
+I (705) phy_init: Saving new calibration data due to checksum failure or outdated calibration data, mode(2)
+I (935) BLE_SCOREBOARD: Generated Hardware ID: 6H01
+I (945) BLE_SCOREBOARD: BLE host task started
+I (945) BLE_SCOREBOARD: BLE scoreboard service initialized
+I (985) NimBLE: Failed to restore IRKs from store; status=8
+
+I (985) BLE_SCOREBOARD: BLE Address: 04:83:08:23:23:9e
+I (985) BLE_SCOREBOARD: No existing bonds to clear
+I (985) BLE_SCOREBOARD: Generated Hardware ID: 6H01
+I (995) BLE_SCOREBOARD: Displaying Hardware ID: 6H01
+I (4595) NimBLE: GAP procedure initiated: advertise; 
+I (4595) NimBLE: disc_mode=2
+I (4595) NimBLE:  adv_channel_map=0 own_addr_type=0 adv_filter_policy=0 adv_itvl_min=160 adv_itvl_max=240
+I (4605) NimBLE: 
+
+I (4615) BLE_SCOREBOARD: BLE advertising started as 'Scoreboard 6H01'
+I (83135) BLE_SCOREBOARD: Connection established; status=0
+I (83135) BLE_SCOREBOARD: First connection - ready for commands
+I (83285) BLE_SCOREBOARD: MTU update event; conn_handle=0, mtu=256
+I (83645) BLE_SCOREBOARD: Subscribe event; cur_indicate=1, val_handle=16
+I (84215) BLE_SCOREBOARD: Subscribe event; cur_indicate=1, val_handle=16
+I (84425) BLE_SCOREBOARD: Write received, len=5
+I (84425) BLE_SCOREBOARD: Packet: Blue=0, Red=0, Timer=00:00, SlowUpdate=0
+I (84425) BLE_SCOREBOARD: Entering score mode: Blue=0, Red=0
+I (103145) BLE_SCOREBOARD: Write received, len=5
+I (103145) BLE_SCOREBOARD: Packet: Blue=0, Red=0, Timer=00:00, SlowUpdate=0
+I (103145) BLE_SCOREBOARD: Entering score mode: Blue=0, Red=0
+I (129455) BLE_SCOREBOARD: Subscribe event; cur_indicate=0, val_handle=16
+I (129455) BLE_SCOREBOARD: Subscribe event; cur_indicate=0, val_handle=16
+I (129455) BLE_SCOREBOARD: Disconnected; reason=531
+I (129465) NimBLE: GAP procedure initiated: advertise; 
+I (129465) NimBLE: disc_mode=2
+I (129465) NimBLE:  adv_channel_map=0 own_addr_type=0 adv_filter_policy=0 adv_itvl_min=160 adv_itvl_max=240
+I (129475) NimBLE: 
+
+I (129485) BLE_SCOREBOARD: BLE advertising started as 'Scoreboard 6H01'
+I (171815) BLE_SCOREBOARD: Connection established; status=0
+I (171965) BLE_SCOREBOARD: MTU update event; conn_handle=0, mtu=256
+I (172325) BLE_SCOREBOARD: Subscribe event; cur_indicate=1, val_handle=16
+I (172745) BLE_SCOREBOARD: Subscribe event; cur_indicate=1, val_handle=16
+I (172835) BLE_SCOREBOARD: Write received, len=5
+I (172835) BLE_SCOREBOARD: Packet: Blue=0, Red=0, Timer=00:00, SlowUpdate=0
+I (172835) BLE_SCOREBOARD: Entering score mode: Blue=0, Red=0

@@ -152,9 +152,6 @@ void ble_scoreboard_display_hardware_id(void)
             uint8_t pattern = g_hw_id_patterns[idx];
             DisplaySymbol(pattern, i);
         }
-
-        // Delay between digits to reduce power draw
-        vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
 
@@ -333,11 +330,17 @@ static int ble_scoreboard_gatt_access(uint16_t conn_handle, uint16_t attr_handle
         g_state.timer_minutes = packet[BLE_PACKET_TIMER_MIN];
         g_state.timer_seconds = packet[BLE_PACKET_TIMER_SEC];
         g_state.slow_update = (packet[BLE_PACKET_FLAGS] & BLE_FLAG_TIMER_UPDATE_SLOW) != 0;
+        bool force_update = (packet[BLE_PACKET_FLAGS] & BLE_FLAG_FORCE_SEGMENT_UPDATE) != 0;
 
-        ESP_LOGI(TAG, "Packet: Blue=%d, Red=%d, Timer=%02d:%02d, SlowUpdate=%d",
+        ESP_LOGI(TAG, "Packet: Blue=%d, Red=%d, Timer=%02d:%02d, SlowUpdate=%d, ForceUpdate=%d",
                  g_state.blue_score, g_state.red_score,
                  g_state.timer_minutes, g_state.timer_seconds,
-                 g_state.slow_update);
+                 g_state.slow_update, force_update);
+
+        // If force update flag is set, clear display state to ensure all segments refresh
+        if (force_update) {
+            ble_scoreboard_clear_display_state();
+        }
 
         // Determine mode based on timer values
         if (g_state.timer_minutes > 0 || g_state.timer_seconds > 0) {
@@ -374,15 +377,11 @@ static void ble_scoreboard_enter_score_mode(void)
         g_timer_task_handle = NULL;
     }
 
-    ESP_LOGI(TAG, "Entering score mode: Blue=%d, Red=%d",
+    ESP_LOGI(TAG, "Updating Score: Blue=%d, Red=%d",
              g_state.blue_score, g_state.red_score);
-
-    // Clear display state for clean update
-    ble_scoreboard_clear_display_state();
 
     // Display scores: group 0 = blue (left), group 1 = red (right)
     DisplayNumber(g_state.blue_score, BLE_DISPLAY_GROUP_BLUE);
-    vTaskDelay(pdMS_TO_TICKS(BLE_DISPLAY_UPDATE_DELAY_MS));
     DisplayNumber(g_state.red_score, BLE_DISPLAY_GROUP_RED);
 }
 

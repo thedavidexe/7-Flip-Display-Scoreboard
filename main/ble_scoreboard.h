@@ -43,7 +43,8 @@
 #define BLE_PACKET_FLAGS        4
 
 // Flags byte bit definitions
-#define BLE_FLAG_TIMER_UPDATE_SLOW  0x01  // bit 0: 1=10s display updates, 0=1s updates
+#define BLE_FLAG_TIMER_UPDATE_SLOW   0x01  // bit 0: 1=10s display updates, 0=1s updates
+#define BLE_FLAG_FORCE_SEGMENT_UPDATE 0x02  // bit 1: 1=force all segments to update (for reset/decrement)
 
 // ============================================================================
 // Hardware ID Generation
