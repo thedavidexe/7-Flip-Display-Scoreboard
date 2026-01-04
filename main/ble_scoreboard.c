@@ -412,7 +412,6 @@ static void ble_scoreboard_timer_task(void *arg)
 
     // Initial display
     DisplayNumber(g_state.timer_minutes, BLE_DISPLAY_GROUP_BLUE);
-    vTaskDelay(pdMS_TO_TICKS(BLE_DISPLAY_UPDATE_DELAY_MS));
     DisplayNumber(g_state.timer_seconds, BLE_DISPLAY_GROUP_RED);
     last_displayed_min = g_state.timer_minutes;
     last_displayed_sec = g_state.timer_seconds;
