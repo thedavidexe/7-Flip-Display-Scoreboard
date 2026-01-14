@@ -17,6 +17,11 @@ struct SettingsView: View {
                 // Connection section
                 connectionSection
 
+                // Debug console section
+                #if DEBUG
+                DebugConsoleView()
+                #endif
+
                 // Action log section
                 actionLogSection
             }

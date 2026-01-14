@@ -8,6 +8,12 @@ enum Constants {
     static let serviceUUID = CBUUID(string: "7B5E4A8C-2D1F-4E3B-9A6C-8F0D1E2C3B4A")
     static let characteristicUUID = CBUUID(string: "7B5E4A8C-2D1F-4E3B-9A6C-8F0D1E2C3B4B")
 
+    // MARK: - Debug Logging
+    // Debug characteristic for streaming thermal/memory/task data from ESP32
+    static let debugCharacteristicUUID = CBUUID(string: "7B5E4A8C-2D1F-4E3B-9A6C-8F0D1E2C3B4C")
+    static let debugPacketSize = 20
+    static let maxDebugLogEntries = 200
+
     // MARK: - BLE Timeouts
     static let scanTimeout: TimeInterval = 10.0
     static let connectionTimeout: TimeInterval = 10.0

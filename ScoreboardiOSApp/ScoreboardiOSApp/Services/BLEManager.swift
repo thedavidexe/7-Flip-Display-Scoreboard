@@ -19,11 +19,20 @@ class BLEManager: NSObject {
     /// Last error message
     var lastError: String?
 
+    // MARK: - Debug Logging Properties
+
+    /// Debug log entries received from ESP32
+    var debugLogs: [DebugLogEntry] = []
+
+    /// Whether debug logging is currently enabled
+    var debugLogEnabled: Bool = false
+
     // MARK: - Private Properties
 
     private var centralManager: CBCentralManager!
     private var connectedPeripheral: CBPeripheral?
     private var scoreboardCharacteristic: CBCharacteristic?
+    private var debugCharacteristic: CBCharacteristic?
     private var scanTimer: Timer?
     private var pendingWriteCompletion: ((Bool) -> Void)?
 
@@ -112,9 +121,38 @@ class BLEManager: NSObject {
         return false
     }
 
+    // MARK: - Debug Logging
+
+    /// Enable or disable debug log notifications from ESP32
+    /// - Parameter enabled: Whether to enable debug logging
+    func setDebugLogging(enabled: Bool) {
+        guard let peripheral = connectedPeripheral,
+              let characteristic = debugCharacteristic else {
+            debugLogEnabled = false
+            return
+        }
+
+        peripheral.setNotifyValue(enabled, for: characteristic)
+        debugLogEnabled = enabled
+
+        if !enabled {
+            // Optionally clear logs when disabled
+            // debugLogs.removeAll()
+        }
+    }
+
+    /// Clear all debug log entries
+    func clearDebugLogs() {
+        debugLogs.removeAll()
+    }
+
     // MARK: - Private Helpers
 
     private func cleanup() {
+        // Stop debug logging
+        debugLogEnabled = false
+        debugCharacteristic = nil
+
         connectedPeripheral = nil
         scoreboardCharacteristic = nil
         connectedDevice = nil
@@ -212,7 +250,11 @@ extension BLEManager: CBPeripheralDelegate {
             return
         }
 
-        peripheral.discoverCharacteristics([Constants.characteristicUUID], for: service)
+        // Discover both command and debug characteristics
+        peripheral.discoverCharacteristics(
+            [Constants.characteristicUUID, Constants.debugCharacteristicUUID],
+            for: service
+        )
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
@@ -231,6 +273,11 @@ extension BLEManager: CBPeripheralDelegate {
         // Enable indications for ACK
         if characteristic.properties.contains(.indicate) {
             peripheral.setNotifyValue(true, for: characteristic)
+        }
+
+        // Also store debug characteristic if available
+        if let debugChar = service.characteristics?.first(where: { $0.uuid == Constants.debugCharacteristicUUID }) {
+            debugCharacteristic = debugChar
         }
 
         // Find the device in discovered list
@@ -263,9 +310,22 @@ extension BLEManager: CBPeripheralDelegate {
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
-        // Handle indication/notification data if needed
         if let error = error {
             lastError = "Value update error: \(error.localizedDescription)"
+            return
+        }
+
+        // Handle debug characteristic notifications
+        if characteristic.uuid == Constants.debugCharacteristicUUID,
+           let data = characteristic.value,
+           let entry = DebugLogEntry.fromPacket(data) {
+            // Insert at beginning (newest first)
+            debugLogs.insert(entry, at: 0)
+
+            // Keep log size bounded
+            if debugLogs.count > Constants.maxDebugLogEntries {
+                debugLogs.removeLast()
+            }
         }
     }
 }

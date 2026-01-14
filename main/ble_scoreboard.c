@@ -8,6 +8,7 @@
  */
 
 #include "ble_scoreboard.h"
+#include "ble_debug.h"
 #include "main.h"
 #include "74AHC595.h"
 
@@ -98,6 +99,11 @@ static const ble_uuid128_t g_char_uuid =
 
 static uint16_t g_char_val_handle;
 
+#if DEBUG_BLE_LOGGING
+static const ble_uuid128_t g_debug_char_uuid =
+    BLE_UUID128_INIT(BLE_DEBUG_CHAR_UUID_128);
+#endif
+
 static const struct ble_gatt_svc_def g_gatt_svcs[] = {
     {
         .type = BLE_GATT_SVC_TYPE_PRIMARY,
@@ -109,6 +115,14 @@ static const struct ble_gatt_svc_def g_gatt_svcs[] = {
                 .val_handle = &g_char_val_handle,
                 .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_INDICATE,
             },
+#if DEBUG_BLE_LOGGING
+            {
+                .uuid = &g_debug_char_uuid.u,
+                .access_cb = ble_debug_gatt_access,
+                .val_handle = ble_debug_get_val_handle(),
+                .flags = BLE_GATT_CHR_F_NOTIFY,
+            },
+#endif
             { 0 }  // End of characteristics
         },
     },
@@ -271,6 +285,11 @@ static int ble_scoreboard_gap_event(struct ble_gap_event *event, void *arg)
         ESP_LOGI(TAG, "Disconnected; reason=%d", event->disconnect.reason);
         g_conn_handle = BLE_HS_CONN_HANDLE_NONE;
 
+#if DEBUG_BLE_LOGGING
+        // Stop debug logging on disconnect
+        ble_debug_set_subscribed(false);
+#endif
+
         // Resume advertising for reconnection
         ble_scoreboard_advertise();
         break;
@@ -281,8 +300,18 @@ static int ble_scoreboard_gap_event(struct ble_gap_event *event, void *arg)
         break;
 
     case BLE_GAP_EVENT_SUBSCRIBE:
-        ESP_LOGI(TAG, "Subscribe event; cur_indicate=%d, val_handle=%d",
-                 event->subscribe.cur_indicate, g_char_val_handle);
+        ESP_LOGI(TAG, "Subscribe event; cur_notify=%d, cur_indicate=%d, val_handle=%d",
+                 event->subscribe.cur_notify, event->subscribe.cur_indicate,
+                 event->subscribe.attr_handle);
+
+#if DEBUG_BLE_LOGGING
+        // Check if this is the debug characteristic
+        if (event->subscribe.attr_handle == *ble_debug_get_val_handle()) {
+            ESP_LOGI(TAG, "Debug characteristic subscription: %d",
+                     event->subscribe.cur_notify);
+            ble_debug_set_subscribed(event->subscribe.cur_notify);
+        }
+#endif
         break;
 
     case BLE_GAP_EVENT_MTU:
@@ -577,6 +606,11 @@ void ble_scoreboard_init(void)
 
     // Start the BLE host task
     nimble_port_freertos_init(ble_host_task);
+
+#if DEBUG_BLE_LOGGING
+    // Initialize debug logging subsystem
+    ble_debug_init();
+#endif
 
     ESP_LOGI(TAG, "BLE scoreboard service initialized");
 }

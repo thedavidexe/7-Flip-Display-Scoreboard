@@ -15,6 +15,14 @@
 #include <stdbool.h>
 
 // ============================================================================
+// Debug Logging Feature Toggle
+// ============================================================================
+// Set to 0 to disable BLE debug logging and reduce firmware size (~4KB)
+#ifndef DEBUG_BLE_LOGGING
+#define DEBUG_BLE_LOGGING 1
+#endif
+
+// ============================================================================
 // BLE UUIDs (128-bit, RFC4122-compliant random UUIDs)
 // ============================================================================
 // Service UUID:        7B5E4A8C-2D1F-4E3B-9A6C-8F0D1E2C3B4A
