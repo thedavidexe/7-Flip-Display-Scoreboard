@@ -38,6 +38,7 @@
 #include "nvs_flash.h"
 #include "driver/gpio.h"
 #include "ble_scoreboard.h"
+#include "power_manager.h"
 
 //Show dump of entire NVS
 //#define NVS_DATA
@@ -579,6 +580,12 @@ void app_main(void)
     // - Generates and displays hardware ID on 7-segment display
     // - Starts BLE advertising
     ble_scoreboard_init();
+
+    // Initialize power manager
+    // - Monitors BLE activity and enters deep sleep after 1 hour of inactivity
+    // - Reduces power draw to ~10uA in deep sleep (6+ months on single 18650)
+    // - Wake up via reset button
+    power_manager_init();
 
 // TODO: add back remote control logic (for now just doing phone app score control via ble)
     // // Setup score A input and task

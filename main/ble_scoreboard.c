@@ -11,6 +11,7 @@
 #include "ble_debug.h"
 #include "main.h"
 #include "74AHC595.h"
+#include "power_manager.h"
 
 #include "esp_log.h"
 #include "esp_mac.h"
@@ -270,6 +271,9 @@ static int ble_scoreboard_gap_event(struct ble_gap_event *event, void *arg)
         if (event->connect.status == 0) {
             g_conn_handle = event->connect.conn_handle;
 
+            // Record activity for power management
+            power_manager_record_activity();
+
             // First connection - send initial state
             if (!g_first_connection) {
                 g_first_connection = true;
@@ -352,6 +356,9 @@ static int ble_scoreboard_gatt_access(uint16_t conn_handle, uint16_t attr_handle
             ESP_LOGE(TAG, "Failed to read packet data: %d", rc);
             return BLE_ATT_ERR_UNLIKELY;
         }
+
+        // Record activity for power management (BLE command received)
+        power_manager_record_activity();
 
         // Process the packet
         g_state.blue_score = packet[BLE_PACKET_BLUE_SCORE] % 100;

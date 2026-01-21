@@ -9,6 +9,7 @@ idf_component_register(SRCS "main.c"
 							"config.c"
 							"ble_scoreboard.c"
 							"ble_debug.c"
+							"power_manager.c"
                     INCLUDE_DIRS "."
                     EMBED_TXTFILES ${project_dir}/server_certs/ca_cert.pem)
                    
