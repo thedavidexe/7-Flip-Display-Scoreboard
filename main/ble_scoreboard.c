@@ -84,6 +84,7 @@ static void ble_scoreboard_on_reset(int reason);
 static int ble_scoreboard_gap_event(struct ble_gap_event *event, void *arg);
 static int ble_scoreboard_gatt_access(uint16_t conn_handle, uint16_t attr_handle,
                                        struct ble_gatt_access_ctxt *ctxt, void *arg);
+static void ble_scoreboard_clear_display_state(void);
 static void ble_scoreboard_enter_score_mode(void);
 static void ble_scoreboard_enter_timer_mode(void);
 static void ble_scoreboard_timer_task(void *arg);
@@ -120,7 +121,7 @@ static const struct ble_gatt_svc_def g_gatt_svcs[] = {
             {
                 .uuid = &g_debug_char_uuid.u,
                 .access_cb = ble_debug_gatt_access,
-                .val_handle = ble_debug_get_val_handle(),
+                .val_handle = &g_debug_char_val_handle,
                 .flags = BLE_GATT_CHR_F_NOTIFY,
             },
 #endif
@@ -310,7 +311,7 @@ static int ble_scoreboard_gap_event(struct ble_gap_event *event, void *arg)
 
 #if DEBUG_BLE_LOGGING
         // Check if this is the debug characteristic
-        if (event->subscribe.attr_handle == *ble_debug_get_val_handle()) {
+        if (event->subscribe.attr_handle == g_debug_char_val_handle) {
             ESP_LOGI(TAG, "Debug characteristic subscription: %d",
                      event->subscribe.cur_notify);
             ble_debug_set_subscribed(event->subscribe.cur_notify);

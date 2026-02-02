@@ -16,7 +16,10 @@
 #include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "soc/soc_caps.h"
+#if SOC_TEMP_SENSOR_SUPPORTED
 #include "driver/temperature_sensor.h"
+#endif
 #include "host/ble_hs.h"
 #include "host/ble_gap.h"
 
@@ -27,9 +30,11 @@ static const char *TAG = "BLE_DEBUG";
 // ============================================================================
 static bool g_subscribed = false;
 static TaskHandle_t g_debug_task_handle = NULL;
+#if SOC_TEMP_SENSOR_SUPPORTED
 static temperature_sensor_handle_t g_temp_sensor = NULL;
+#endif
 static uint8_t g_sequence = 0;
-static uint16_t g_debug_char_val_handle = 0;
+uint16_t g_debug_char_val_handle = 0;
 
 // Connection handle from ble_scoreboard.c
 extern bool ble_scoreboard_is_connected(void);
@@ -37,6 +42,7 @@ extern bool ble_scoreboard_is_connected(void);
 // ============================================================================
 // Temperature Sensor Initialization
 // ============================================================================
+#if SOC_TEMP_SENSOR_SUPPORTED
 static void ble_debug_init_temp_sensor(void)
 {
     temperature_sensor_config_t temp_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
@@ -58,6 +64,7 @@ static void ble_debug_init_temp_sensor(void)
 
     ESP_LOGI(TAG, "Temperature sensor initialized");
 }
+#endif
 
 // ============================================================================
 // Debug Status Collection
@@ -65,6 +72,7 @@ static void ble_debug_init_temp_sensor(void)
 void ble_debug_get_status(ble_debug_status_t *status)
 {
     // Get temperature
+#if SOC_TEMP_SENSOR_SUPPORTED
     if (g_temp_sensor != NULL) {
         float temp = 0;
         if (temperature_sensor_get_celsius(g_temp_sensor, &temp) == ESP_OK) {
@@ -75,6 +83,9 @@ void ble_debug_get_status(ble_debug_status_t *status)
     } else {
         status->temperature = -999.0f;  // Sensor not available
     }
+#else
+    status->temperature = -999.0f;  // Not supported on this chip
+#endif
 
     // Get heap info
     status->free_heap = esp_get_free_heap_size();
@@ -207,7 +218,11 @@ void ble_debug_init(void)
     ESP_LOGI(TAG, "Initializing BLE debug logging");
 
     // Initialize temperature sensor
+#if SOC_TEMP_SENSOR_SUPPORTED
     ble_debug_init_temp_sensor();
+#else
+    ESP_LOGI(TAG, "Temperature sensor not supported on this chip");
+#endif
 
     g_subscribed = false;
     g_sequence = 0;
@@ -262,11 +277,6 @@ void ble_debug_set_subscribed(bool subscribed)
     } else if (!subscribed && was_subscribed) {
         ble_debug_stop();
     }
-}
-
-uint16_t* ble_debug_get_val_handle(void)
-{
-    return &g_debug_char_val_handle;
 }
 
 #endif // DEBUG_BLE_LOGGING

@@ -19,7 +19,7 @@
 
 // Inactivity timeout before entering deep sleep (in seconds)
 // 1 hour = 3600 seconds
-#define POWER_INACTIVITY_TIMEOUT_SEC    3600
+#define POWER_INACTIVITY_TIMEOUT_SEC    100
 
 // Check interval for inactivity (in seconds)
 // Check every 60 seconds to balance responsiveness and overhead

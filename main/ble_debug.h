@@ -13,6 +13,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+struct ble_gatt_access_ctxt;
+
 // ============================================================================
 // Feature Toggle
 // ============================================================================
@@ -116,12 +118,10 @@ int ble_debug_gatt_access(uint16_t conn_handle, uint16_t attr_handle,
                           struct ble_gatt_access_ctxt *ctxt, void *arg);
 
 /**
- * Get the debug characteristic value handle.
+ * Debug characteristic value handle.
  * Used by ble_scoreboard.c to set up the GATT service.
- *
- * @return Pointer to the value handle variable
  */
-uint16_t* ble_debug_get_val_handle(void);
+extern uint16_t g_debug_char_val_handle;
 
 #endif // DEBUG_BLE_LOGGING
 #endif // BLE_DEBUG_H
