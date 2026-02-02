@@ -108,7 +108,7 @@ void power_manager_init(void)
     BaseType_t ret = xTaskCreate(
         power_manager_monitor_task,
         "pwr_monitor",
-        2048,               // Stack size
+        4096,               // Stack size (needs headroom for BLE shutdown)
         NULL,               // Task parameter
         2,                  // Low priority (background task)
         &g_monitor_task_handle

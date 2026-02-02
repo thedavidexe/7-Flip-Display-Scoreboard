@@ -537,9 +537,8 @@ static void ble_scoreboard_on_sync(void)
     // Clear existing bonds
     ble_scoreboard_clear_bonds();
 
-    // Generate and display hardware ID
+    // Generate hardware ID
     ble_scoreboard_generate_hardware_id(g_hardware_id);
-    ble_scoreboard_display_hardware_id();
 
     // Start advertising
     ble_scoreboard_advertise();
