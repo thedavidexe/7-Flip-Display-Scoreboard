@@ -24,6 +24,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nimble/nimble_port.h"
+#include "74AHC595.h"
 
 static const char *TAG = "POWER_MGR";
 
@@ -139,6 +140,13 @@ uint32_t power_manager_get_idle_seconds(void)
 void power_manager_enter_deep_sleep(void)
 {
     ESP_LOGW(TAG, "Entering deep sleep mode...");
+
+    // Display "SLEP" on the first 4 displays before sleeping
+    // S=0x6D, L=0x38, E=0x79, P=0x73
+    DisplaySymbol(0x6D, 0); // S
+    DisplaySymbol(0x38, 1); // L
+    DisplaySymbol(0x79, 2); // E
+    DisplaySymbol(0x73, 3); // P
 
     // Stop the NimBLE stack to cleanly shut down BLE
     ESP_LOGI(TAG, "Stopping BLE stack...");
