@@ -24,7 +24,10 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nimble/nimble_port.h"
+#include "driver/gpio.h"
+#include "driver/rtc_io.h"
 #include "74AHC595.h"
+#include "led.h"
 
 static const char *TAG = "POWER_MGR";
 
@@ -157,6 +160,34 @@ void power_manager_enter_deep_sleep(void)
     } else {
         ESP_LOGW(TAG, "Failed to stop BLE stack cleanly: %d", rc);
     }
+
+    // --- Prepare GPIOs for deep sleep ---
+    // Without hold, non-RTC GPIOs (16, 18, 19, 23) float when the digital
+    // domain powers down.  If POWER_PIN (GPIO19) floats high it keeps the
+    // display driver circuit powered, draining the battery.
+    ESP_LOGI(TAG, "Configuring GPIOs for deep sleep...");
+
+    // Drive all shift-register and power outputs LOW
+    gpio_set_level(POWER_PIN, 0);
+    gpio_set_level(SHIFT_REG_DATA_PIN, 0);
+    gpio_set_level(SHIFT_REG_LATCH_PIN, 0);
+    gpio_set_level(SHIFT_REG_CLOCK_PIN, 0);
+
+    // Lock each output so its level is held during deep sleep
+    gpio_hold_en(POWER_PIN);
+    gpio_hold_en(SHIFT_REG_DATA_PIN);
+    gpio_hold_en(SHIFT_REG_LATCH_PIN);
+    gpio_hold_en(SHIFT_REG_CLOCK_PIN);
+
+    // Enable the global digital-pad hold for deep sleep
+    gpio_deep_sleep_hold_en();
+
+    // Isolate RTC-capable LED pads to prevent leakage through external
+    // pull-ups / LED circuits (even though PWM is not initialised,
+    // the pads can still leak a few hundred uA if left connected)
+    rtc_gpio_isolate(LED_GPIO_RED);
+    rtc_gpio_isolate(LED_GPIO_GREEN);
+    rtc_gpio_isolate(LED_GPIO_BLUE);
 
     // Small delay to allow logs to flush
     vTaskDelay(pdMS_TO_TICKS(100));
