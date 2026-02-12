@@ -407,12 +407,8 @@ static void ble_scoreboard_clear_display_state(void)
 static void ble_scoreboard_enter_score_mode(void)
 {
     g_state.timer_active = false;
-
-    // Stop any running timer task
-    if (g_timer_task_handle != NULL) {
-        vTaskDelete(g_timer_task_handle);
-        g_timer_task_handle = NULL;
-    }
+    // Timer task (if running) will notice timer_active is false and
+    // return to waiting for the next notification — no need to delete it.
 
     ESP_LOGI(TAG, "Updating Score: Blue=%d, Red=%d",
              g_state.blue_score, g_state.red_score);
@@ -424,12 +420,6 @@ static void ble_scoreboard_enter_score_mode(void)
 
 static void ble_scoreboard_enter_timer_mode(void)
 {
-    // Stop any existing timer task
-    if (g_timer_task_handle != NULL) {
-        vTaskDelete(g_timer_task_handle);
-        g_timer_task_handle = NULL;
-    }
-
     g_state.timer_active = true;
 
     ESP_LOGI(TAG, "Entering timer mode: %02d:%02d (slow_update=%d)",
@@ -438,72 +428,83 @@ static void ble_scoreboard_enter_timer_mode(void)
     // Clear display state for clean update
     ble_scoreboard_clear_display_state();
 
-    // Create timer countdown task
-    xTaskCreate(ble_scoreboard_timer_task, "ble_timer", 2048, NULL, 5, &g_timer_task_handle);
+    if (g_timer_task_handle == NULL) {
+        // Create the single timer task (lives for the lifetime of the app)
+        xTaskCreate(ble_scoreboard_timer_task, "ble_timer", 2048, NULL, 5, &g_timer_task_handle);
+    } else {
+        // Task already exists — notify it to restart with the new values
+        xTaskNotifyGive(g_timer_task_handle);
+    }
 }
 
 static void ble_scoreboard_timer_task(void *arg)
 {
-    uint8_t last_displayed_min = 0xFF;
-    uint8_t last_displayed_sec = 0xFF;
+    for (;;) {
+        uint8_t last_displayed_min = 0xFF;
+        uint8_t last_displayed_sec = 0xFF;
 
-    // Initial display
-    DisplayNumber(g_state.timer_minutes, BLE_DISPLAY_GROUP_BLUE);
-    DisplayNumber(g_state.timer_seconds, BLE_DISPLAY_GROUP_RED);
-    last_displayed_min = g_state.timer_minutes;
-    last_displayed_sec = g_state.timer_seconds;
+        // Initial display of current timer values
+        DisplayNumber(g_state.timer_minutes, BLE_DISPLAY_GROUP_BLUE);
+        DisplayNumber(g_state.timer_seconds, BLE_DISPLAY_GROUP_RED);
+        last_displayed_min = g_state.timer_minutes;
+        last_displayed_sec = g_state.timer_seconds;
 
-    while (g_state.timer_active) {
-        // Wait 1 second
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        while (g_state.timer_active) {
+            // Wait 1 second, but wake immediately if notified (new timer set)
+            uint32_t notified = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000));
+            if (notified > 0) {
+                // New timer values received — restart the countdown
+                ESP_LOGI(TAG, "Timer restarted: %02d:%02d",
+                         g_state.timer_minutes, g_state.timer_seconds);
+                break;
+            }
 
-        // Decrement timer
-        if (g_state.timer_seconds > 0) {
-            g_state.timer_seconds--;
-        } else if (g_state.timer_minutes > 0) {
-            g_state.timer_minutes--;
-            g_state.timer_seconds = 59;
-        } else {
-            // Timer expired - return to score mode
-            ESP_LOGI(TAG, "Timer expired, returning to score mode");
-            g_state.timer_active = false;
-            ble_scoreboard_enter_score_mode();
-            g_timer_task_handle = NULL;
-            vTaskDelete(NULL);
-            return;
-        }
+            // Decrement timer
+            if (g_state.timer_seconds > 0) {
+                g_state.timer_seconds--;
+            } else if (g_state.timer_minutes > 0) {
+                g_state.timer_minutes--;
+                g_state.timer_seconds = 59;
+            } else {
+                // Timer expired — return to score mode
+                ESP_LOGI(TAG, "Timer expired, returning to score mode");
+                g_state.timer_active = false;
+                ble_scoreboard_enter_score_mode();
+                break;
+            }
 
-        // Determine if we should update display
-        bool should_update = false;
+            // Determine if we should update display
+            bool should_update = false;
 
-        if (g_state.slow_update) {
-            // Update every 10 seconds
-            if (g_state.timer_seconds % 10 == 0) {
+            if (g_state.slow_update) {
+                // Update every 10 seconds
+                if (g_state.timer_seconds % 10 == 0) {
+                    should_update = true;
+                }
+            } else {
+                // Update every second
                 should_update = true;
             }
-        } else {
-            // Update every second
-            should_update = true;
-        }
 
-        if (should_update) {
-            // Update minutes display if changed
-            if (g_state.timer_minutes != last_displayed_min) {
-                DisplayNumber(g_state.timer_minutes, BLE_DISPLAY_GROUP_BLUE);
-                last_displayed_min = g_state.timer_minutes;
-                vTaskDelay(pdMS_TO_TICKS(BLE_DISPLAY_UPDATE_DELAY_MS));
-            }
+            if (should_update) {
+                // Update minutes display if changed
+                if (g_state.timer_minutes != last_displayed_min) {
+                    DisplayNumber(g_state.timer_minutes, BLE_DISPLAY_GROUP_BLUE);
+                    last_displayed_min = g_state.timer_minutes;
+                    vTaskDelay(pdMS_TO_TICKS(BLE_DISPLAY_UPDATE_DELAY_MS));
+                }
 
-            // Update seconds display if changed
-            if (g_state.timer_seconds != last_displayed_sec) {
-                DisplayNumber(g_state.timer_seconds, BLE_DISPLAY_GROUP_RED);
-                last_displayed_sec = g_state.timer_seconds;
+                // Update seconds display if changed
+                if (g_state.timer_seconds != last_displayed_sec) {
+                    DisplayNumber(g_state.timer_seconds, BLE_DISPLAY_GROUP_RED);
+                    last_displayed_sec = g_state.timer_seconds;
+                }
             }
         }
+
+        // Timer finished or cancelled — block until next timer start
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     }
-
-    g_timer_task_handle = NULL;
-    vTaskDelete(NULL);
 }
 
 // ============================================================================
