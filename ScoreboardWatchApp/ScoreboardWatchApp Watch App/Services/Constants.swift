@@ -9,7 +9,7 @@ enum Constants {
     static let characteristicUUID = CBUUID(string: "7B5E4A8C-2D1F-4E3B-9A6C-8F0D1E2C3B4B")
 
     // MARK: - BLE Timeouts
-    static let scanTimeout: TimeInterval = 10.0
+    static let scanTimeout: TimeInterval = 4.0
     static let connectionTimeout: TimeInterval = 10.0
     static let writeRetryCount = 3
     static let writeRetryDelayBase: TimeInterval = 0.1
@@ -41,7 +41,8 @@ enum Constants {
 
     // MARK: - Digital Crown
     enum DigitalCrown {
-        /// Rotation needed to trigger one score increment (~quarter turn)
-        static let scoreThreshold: Double = 0.25
+        /// Accumulated rotation needed to trigger one score increment.
+        /// With .low sensitivity, ~quarter turn ≈ 1.5 units. Tune on-device if needed.
+        static let scoreThreshold: Double = 3.0
     }
 }

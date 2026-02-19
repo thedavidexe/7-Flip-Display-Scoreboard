@@ -7,12 +7,14 @@ struct ScoreboardSelectionView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if viewModel.bleManager.connectionStatus == .scanning {
+                if viewModel.bleManager.connectionStatus == .scanning && viewModel.bleManager.discoveredDevices.isEmpty {
                     scanningView
+                } else if viewModel.bleManager.connectionStatus == .scanning {
+                    deviceListView(showScanningHeader: true)
                 } else if viewModel.bleManager.discoveredDevices.isEmpty {
                     emptyStateView
                 } else {
-                    deviceListView
+                    deviceListView()
                 }
             }
             .navigationTitle("Scoreboards")
@@ -44,21 +46,31 @@ struct ScoreboardSelectionView: View {
         }
     }
 
-    private var deviceListView: some View {
-        List(viewModel.bleManager.discoveredDevices) { device in
-            Button {
-                viewModel.bleManager.connect(to: device)
-            } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(device.hardwareId)
-                            .font(.headline)
-                        Text(device.signalStrength.rawValue)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
+    private func deviceListView(showScanningHeader: Bool = false) -> some View {
+        List {
+            if showScanningHeader {
+                HStack(spacing: 6) {
+                    ProgressView()
+                    Text("Scanning...")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+            }
+            ForEach(viewModel.bleManager.discoveredDevices) { device in
+                Button {
+                    viewModel.bleManager.connect(to: device)
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(device.hardwareId)
+                                .font(.headline)
+                            Text(device.signalStrength.rawValue)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        signalIndicator(for: device)
                     }
-                    Spacer()
-                    signalIndicator(for: device)
                 }
             }
         }

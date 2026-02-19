@@ -10,6 +10,7 @@ struct ScoreControlView: View {
     @FocusState private var isFocused: Bool
     @State private var crownRotation: Double = 0.0
     @State private var accumulatedRotation: Double = 0.0
+    @State private var lastScoreTime: Date = .distantPast
     @State private var showingSettings = false
     @State private var showingResetConfirm = false
 
@@ -40,9 +41,9 @@ struct ScoreControlView: View {
             $crownRotation,
             from: -100.0,
             through: 100.0,
-            sensitivity: .medium,
+            sensitivity: .low,
             isContinuous: true,
-            isHapticFeedbackEnabled: true
+            isHapticFeedbackEnabled: false
         )
         .onChange(of: crownRotation) { oldValue, newValue in
             handleCrownRotation(oldValue: oldValue, newValue: newValue)
@@ -122,31 +123,26 @@ struct ScoreControlView: View {
         // Guard against wrap-around artifacts in continuous mode
         guard abs(delta) < 10.0 else { return }
 
+        // Require a pause after each score before allowing another
+        let cooldown: TimeInterval = 0.5
+        if Date().timeIntervalSince(lastScoreTime) < cooldown {
+            accumulatedRotation = 0
+            return
+        }
+
         accumulatedRotation += delta
         let threshold = Constants.DigitalCrown.scoreThreshold
 
-        // Positive rotation (crown scroll UP) → increment Red
         if accumulatedRotation >= threshold {
-            let ticks = Int(accumulatedRotation / threshold)
-            for _ in 0..<ticks {
-                viewModel.incrementRedScore()
-            }
-            accumulatedRotation -= Double(ticks) * threshold
-            playScoreTriggerHaptic()
+            viewModel.incrementRedScore()
+            accumulatedRotation = 0
+            lastScoreTime = Date()
+            WKInterfaceDevice.current().play(.notification)
+        } else if accumulatedRotation <= -threshold {
+            viewModel.incrementBlueScore()
+            accumulatedRotation = 0
+            lastScoreTime = Date()
+            WKInterfaceDevice.current().play(.notification)
         }
-
-        // Negative rotation (crown scroll DOWN) → increment Blue
-        if accumulatedRotation <= -threshold {
-            let ticks = Int(abs(accumulatedRotation) / threshold)
-            for _ in 0..<ticks {
-                viewModel.incrementBlueScore()
-            }
-            accumulatedRotation += Double(ticks) * threshold
-            playScoreTriggerHaptic()
-        }
-    }
-
-    private func playScoreTriggerHaptic() {
-        WKInterfaceDevice.current().play(.notification)
     }
 }
