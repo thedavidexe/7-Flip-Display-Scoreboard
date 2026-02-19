@@ -14,6 +14,7 @@ struct ScoreControlView: View {
     @State private var idleResetTask: Task<Void, Never>?
     @State private var showingSettings = false
     @State private var showingResetConfirm = false
+    @State private var runtimeManager = ExtendedRuntimeManager()
 
     var body: some View {
         GeometryReader { geometry in
@@ -51,6 +52,10 @@ struct ScoreControlView: View {
         }
         .onAppear {
             isFocused = true
+            runtimeManager.start()
+        }
+        .onDisappear {
+            runtimeManager.stop()
         }
         .onChange(of: showingSettings) { _, isShowing in
             if !isShowing { isFocused = true }
@@ -161,4 +166,39 @@ struct ScoreControlView: View {
             }
         }
     }
+}
+
+// MARK: - Extended Runtime Session
+
+private class ExtendedRuntimeManager: NSObject, WKExtendedRuntimeSessionDelegate {
+    private var session: WKExtendedRuntimeSession?
+
+    func start() {
+        guard session == nil || session?.state == .invalid else { return }
+        session = WKExtendedRuntimeSession()
+        session?.delegate = self
+        session?.start()
+    }
+
+    func stop() {
+        session?.invalidate()
+        session = nil
+    }
+
+    func extendedRuntimeSessionDidStart(_ extendedRuntimeSession: WKExtendedRuntimeSession) {}
+
+    func extendedRuntimeSessionWillExpire(_ extendedRuntimeSession: WKExtendedRuntimeSession) {
+        // Restart before expiry to maintain continuous runtime
+        extendedRuntimeSession.invalidate()
+        let next = WKExtendedRuntimeSession()
+        next.delegate = self
+        next.start()
+        session = next
+    }
+
+    func extendedRuntimeSession(
+        _ extendedRuntimeSession: WKExtendedRuntimeSession,
+        didInvalidateWith reason: WKExtendedRuntimeSessionInvalidationReason,
+        error: Error?
+    ) {}
 }
