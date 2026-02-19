@@ -85,6 +85,8 @@ static int ble_scoreboard_gap_event(struct ble_gap_event *event, void *arg);
 static int ble_scoreboard_gatt_access(uint16_t conn_handle, uint16_t attr_handle,
                                        struct ble_gatt_access_ctxt *ctxt, void *arg);
 static void ble_scoreboard_clear_display_state(void);
+static void ble_scoreboard_clear_blue_display_state(void);
+static void ble_scoreboard_clear_red_display_state(void);
 static void ble_scoreboard_enter_score_mode(void);
 static void ble_scoreboard_enter_timer_mode(void);
 static void ble_scoreboard_timer_task(void *arg);
@@ -361,7 +363,10 @@ static int ble_scoreboard_gatt_access(uint16_t conn_handle, uint16_t attr_handle
         // Record activity for power management (BLE command received)
         power_manager_record_activity();
 
-        // Process the packet
+        // Process the packet - save previous scores before updating
+        uint8_t prev_blue = g_state.blue_score;
+        uint8_t prev_red = g_state.red_score;
+
         g_state.blue_score = packet[BLE_PACKET_BLUE_SCORE] % 100;
         g_state.red_score = packet[BLE_PACKET_RED_SCORE] % 100;
         g_state.timer_minutes = packet[BLE_PACKET_TIMER_MIN];
@@ -374,9 +379,14 @@ static int ble_scoreboard_gatt_access(uint16_t conn_handle, uint16_t attr_handle
                  g_state.timer_minutes, g_state.timer_seconds,
                  g_state.slow_update, force_update);
 
-        // If force update flag is set, clear display state to ensure all segments refresh
+        // If force update flag is set, only clear display state for the score(s) that changed
         if (force_update) {
-            ble_scoreboard_clear_display_state();
+            if (g_state.blue_score != prev_blue) {
+                ble_scoreboard_clear_blue_display_state();
+            }
+            if (g_state.red_score != prev_red) {
+                ble_scoreboard_clear_red_display_state();
+            }
         }
 
         // Determine mode based on timer values
@@ -400,6 +410,22 @@ static void ble_scoreboard_clear_display_state(void)
 {
     // Clear current pattern state to force full refresh
     for (uint8_t i = 0; i < status.display_number && i < MAX_DISPLAYS; i++) {
+        status.current_pattern[i] = 0;
+    }
+}
+
+static void ble_scoreboard_clear_blue_display_state(void)
+{
+    // Clear only blue team displays (group 0: displays 0-1)
+    for (uint8_t i = 0; i < 2 && i < MAX_DISPLAYS; i++) {
+        status.current_pattern[i] = 0;
+    }
+}
+
+static void ble_scoreboard_clear_red_display_state(void)
+{
+    // Clear only red team displays (group 1: displays 2-3)
+    for (uint8_t i = 2; i < 4 && i < MAX_DISPLAYS; i++) {
         status.current_pattern[i] = 0;
     }
 }
@@ -491,7 +517,6 @@ static void ble_scoreboard_timer_task(void *arg)
                 if (g_state.timer_minutes != last_displayed_min) {
                     DisplayNumber(g_state.timer_minutes, BLE_DISPLAY_GROUP_BLUE);
                     last_displayed_min = g_state.timer_minutes;
-                    vTaskDelay(pdMS_TO_TICKS(BLE_DISPLAY_UPDATE_DELAY_MS));
                 }
 
                 // Update seconds display if changed

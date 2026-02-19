@@ -38,4 +38,10 @@ enum Constants {
 
     // MARK: - Default Values
     static let defaultScoreIncrement = 1
+
+    // MARK: - Digital Crown
+    enum DigitalCrown {
+        /// Rotation needed to trigger one score increment (~quarter turn)
+        static let scoreThreshold: Double = 0.25
+    }
 }
