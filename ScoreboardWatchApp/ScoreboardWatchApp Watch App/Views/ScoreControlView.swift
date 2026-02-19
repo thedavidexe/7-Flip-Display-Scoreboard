@@ -11,6 +11,7 @@ struct ScoreControlView: View {
     @State private var crownRotation: Double = 0.0
     @State private var accumulatedRotation: Double = 0.0
     @State private var lastScoreTime: Date = .distantPast
+    @State private var idleResetTask: Task<Void, Never>?
     @State private var showingSettings = false
     @State private var showingResetConfirm = false
 
@@ -43,7 +44,7 @@ struct ScoreControlView: View {
             through: 100.0,
             sensitivity: .low,
             isContinuous: true,
-            isHapticFeedbackEnabled: false
+            isHapticFeedbackEnabled: true
         )
         .onChange(of: crownRotation) { oldValue, newValue in
             handleCrownRotation(oldValue: oldValue, newValue: newValue)
@@ -137,12 +138,27 @@ struct ScoreControlView: View {
             viewModel.incrementRedScore()
             accumulatedRotation = 0
             lastScoreTime = Date()
-            WKInterfaceDevice.current().play(.notification)
+            idleResetTask?.cancel()
+            WKInterfaceDevice.current().play(.success)
         } else if accumulatedRotation <= -threshold {
             viewModel.incrementBlueScore()
             accumulatedRotation = 0
             lastScoreTime = Date()
-            WKInterfaceDevice.current().play(.notification)
+            idleResetTask?.cancel()
+            WKInterfaceDevice.current().play(.success)
+        } else {
+            scheduleIdleReset()
+        }
+    }
+
+    /// Reset the accumulator if the crown stops moving
+    private func scheduleIdleReset() {
+        idleResetTask?.cancel()
+        idleResetTask = Task {
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s idle
+            if !Task.isCancelled {
+                accumulatedRotation = 0
+            }
         }
     }
 }

@@ -7,14 +7,12 @@ struct ScoreboardSelectionView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if viewModel.bleManager.connectionStatus == .scanning && viewModel.bleManager.discoveredDevices.isEmpty {
-                    scanningView
-                } else if viewModel.bleManager.connectionStatus == .scanning {
-                    deviceListView(showScanningHeader: true)
-                } else if viewModel.bleManager.discoveredDevices.isEmpty {
+                if viewModel.bleManager.discoveredDevices.isEmpty && viewModel.bleManager.connectionStatus != .scanning {
                     emptyStateView
+                } else if viewModel.bleManager.discoveredDevices.isEmpty {
+                    scanningView
                 } else {
-                    deviceListView()
+                    deviceListView
                 }
             }
             .navigationTitle("Scoreboards")
@@ -46,16 +44,8 @@ struct ScoreboardSelectionView: View {
         }
     }
 
-    private func deviceListView(showScanningHeader: Bool = false) -> some View {
+    private var deviceListView: some View {
         List {
-            if showScanningHeader {
-                HStack(spacing: 6) {
-                    ProgressView()
-                    Text("Scanning...")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                }
-            }
             ForEach(viewModel.bleManager.discoveredDevices) { device in
                 Button {
                     viewModel.bleManager.connect(to: device)
@@ -91,12 +81,16 @@ struct ScoreboardSelectionView: View {
         }
     }
 
+    @ViewBuilder
     private var scanButton: some View {
-        Button {
-            viewModel.bleManager.startScanning()
-        } label: {
-            Label("Scan", systemImage: "arrow.clockwise")
+        if viewModel.bleManager.connectionStatus == .scanning {
+            ProgressView()
+        } else {
+            Button {
+                viewModel.bleManager.startScanning()
+            } label: {
+                Label("Scan", systemImage: "arrow.clockwise")
+            }
         }
-        .disabled(viewModel.bleManager.connectionStatus == .scanning)
     }
 }
