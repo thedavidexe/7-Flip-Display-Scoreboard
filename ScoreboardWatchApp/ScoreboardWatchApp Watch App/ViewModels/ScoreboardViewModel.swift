@@ -39,7 +39,7 @@ class ScoreboardViewModel {
     func decrementBlueScore() {
         if state.blueScore > 0 {
             state.blueScore -= 1
-            sendCurrentState(forceUpdate: true)
+            sendCurrentState()
         }
     }
 
@@ -54,7 +54,7 @@ class ScoreboardViewModel {
     func decrementRedScore() {
         if state.redScore > 0 {
             state.redScore -= 1
-            sendCurrentState(forceUpdate: true)
+            sendCurrentState()
         }
     }
 

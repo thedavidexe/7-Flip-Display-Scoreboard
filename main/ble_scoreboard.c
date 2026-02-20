@@ -13,6 +13,7 @@
 #include "74AHC595.h"
 #include "power_manager.h"
 
+#include "esp_bt.h"
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "nvs_flash.h"
@@ -246,8 +247,10 @@ static void ble_scoreboard_advertise(void)
     memset(&adv_params, 0, sizeof(adv_params));
     adv_params.conn_mode = BLE_GAP_CONN_MODE_UND;
     adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
-    adv_params.itvl_min = BLE_GAP_ADV_ITVL_MS(100);
-    adv_params.itvl_max = BLE_GAP_ADV_ITVL_MS(150);
+    // Slow advertising reduces radio duty cycle during standby.
+    // iOS/watchOS scans for 10-30s so discovery is unaffected.
+    adv_params.itvl_min = BLE_GAP_ADV_ITVL_MS(500);
+    adv_params.itvl_max = BLE_GAP_ADV_ITVL_MS(1000);
 
     // Start advertising
     rc = ble_gap_adv_start(g_own_addr_type, NULL, BLE_HS_FOREVER,
@@ -276,6 +279,27 @@ static int ble_scoreboard_gap_event(struct ble_gap_event *event, void *arg)
 
             // Record activity for power management
             power_manager_record_activity();
+
+            // Request low-duty-cycle connection parameters to reduce radio-on time and chip
+            // heat. 200-400ms interval cuts ESP32 radio duty cycle ~10-20x vs iOS defaults
+            // (~7.5-15ms). Latency=0 so the ESP32 wakes every event and misses no writes.
+            // Supervision timeout 6s = 15 missed events at 400ms before declaring disconnect,
+            // tolerating brief RF interference without spurious drops.
+            // Apple guidelines allow 20ms-2000ms intervals so watchOS will accept these.
+            struct ble_gap_upd_params conn_params = {
+                .itvl_min            = BLE_GAP_CONN_ITVL_MS(200),
+                .itvl_max            = BLE_GAP_CONN_ITVL_MS(400),
+                .latency             = 0,
+                .supervision_timeout = BLE_GAP_SUPERVISION_TIMEOUT_MS(6000),
+                .min_ce_len          = 0,
+                .max_ce_len          = 0,
+            };
+            int upd_rc = ble_gap_update_params(g_conn_handle, &conn_params);
+            if (upd_rc != 0) {
+                ESP_LOGW(TAG, "Connection param update request failed: %d", upd_rc);
+            } else {
+                ESP_LOGI(TAG, "Connection param update requested: 200-400ms interval");
+            }
 
             // First connection - send initial state
             if (!g_first_connection) {
@@ -324,6 +348,17 @@ static int ble_scoreboard_gap_event(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_MTU:
         ESP_LOGI(TAG, "MTU update event; conn_handle=%d, mtu=%d",
                  event->mtu.conn_handle, event->mtu.value);
+        break;
+
+    case BLE_GAP_EVENT_CONN_UPDATE_REQ:
+        // Accept any connection parameter update request from the central.
+        // NimBLE pre-fills self_params with peer_params; returning 0 accepts as-is.
+        ESP_LOGI(TAG, "Connection param update requested by central; accepting");
+        return 0;
+
+    case BLE_GAP_EVENT_CONN_UPDATE:
+        ESP_LOGI(TAG, "Connection params updated; status=%d",
+                 event->conn_update.status);
         break;
 
     default:
@@ -379,14 +414,9 @@ static int ble_scoreboard_gatt_access(uint16_t conn_handle, uint16_t attr_handle
                  g_state.timer_minutes, g_state.timer_seconds,
                  g_state.slow_update, force_update);
 
-        // If force update flag is set, only clear display state for the score(s) that changed
+        // If force update flag is set, clear all display state to force a full refresh
         if (force_update) {
-            if (g_state.blue_score != prev_blue) {
-                ble_scoreboard_clear_blue_display_state();
-            }
-            if (g_state.red_score != prev_red) {
-                ble_scoreboard_clear_red_display_state();
-            }
+            ble_scoreboard_clear_display_state();
         }
 
         // Determine mode based on timer values
@@ -597,6 +627,12 @@ void ble_scoreboard_init(void)
         ESP_LOGE(TAG, "Failed to initialize NimBLE port: %d", rc);
         return;
     }
+
+    // Reduce TX power to 0 dBm. The auto/default is up to +20 dBm which is excessive
+    // for a short-range application (<30 m) and contributes to chip heating.
+    // esp_ble_tx_power_set acts at controller level and works with NimBLE.
+    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV,     ESP_PWR_LVL_N0);
+    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_N0);
 
     // Configure the host
     ble_hs_cfg.reset_cb = ble_scoreboard_on_reset;

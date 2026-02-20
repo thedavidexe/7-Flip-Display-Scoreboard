@@ -43,7 +43,7 @@
 //Show dump of entire NVS
 //#define NVS_DATA
 
-extern const char *CONFIG_TAG;
+const char *CONFIG_TAG = "CONFIG";
 status_t status = {};
 SemaphoreHandle_t xNewDataSemaphore = NULL;
 SemaphoreHandle_t xPeriodicSemaphore = NULL;

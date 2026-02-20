@@ -42,6 +42,12 @@ struct ScoreControlView: View {
 
                 // Bottom buttons
                 VStack(spacing: 12) {
+                    Button(action: { viewModel.sendCurrentState(forceUpdate: true) }) {
+                        Label("Refresh Display", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+
                     Button(action: viewModel.resetScores) {
                         Label("Reset Scores", systemImage: "arrow.counterclockwise")
                             .frame(maxWidth: .infinity)

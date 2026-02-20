@@ -64,14 +64,17 @@ struct ScoreControlView: View {
             if !isShowing { isFocused = true }
         }
         .confirmationDialog("Options", isPresented: $showingResetConfirm) {
-            Button("Reset to 00-00", role: .destructive) {
-                viewModel.resetScores()
+            Button("Refresh Display") {
+                viewModel.sendCurrentState(forceUpdate: true)
             }
             Button("Blue -1") {
                 viewModel.decrementBlueScore()
             }
             Button("Red -1") {
                 viewModel.decrementRedScore()
+            }
+            Button("Reset to 00-00", role: .destructive) {
+                viewModel.resetScores()
             }
             Button("Disconnect", role: .destructive) {
                 viewModel.bleManager.disconnect()

@@ -42,7 +42,7 @@ class ScoreboardViewModel {
         if state.blueScore > 0 {
             state.blueScore -= 1
             logAction(.blueScoreChange, "Blue -1 (now \(state.blueScore))")
-            sendCurrentState(forceUpdate: true)
+            sendCurrentState()
         }
     }
 
@@ -59,7 +59,7 @@ class ScoreboardViewModel {
         if state.redScore > 0 {
             state.redScore -= 1
             logAction(.redScoreChange, "Red -1 (now \(state.redScore))")
-            sendCurrentState(forceUpdate: true)
+            sendCurrentState()
         }
     }
 

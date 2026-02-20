@@ -21,9 +21,5 @@ CONFIG_BT_NIMBLE_SM_SC=y
 # NimBLE task settings
 CONFIG_BT_NIMBLE_PINNED_TO_CORE=0
 
-# Increase sleep clock accuracy tolerance from 250 to 500 PPM
-# Widens BLE timing windows to tolerate crystal drift from heat
-CONFIG_BTDM_BLE_DEFAULT_SCA_500PPM=y
-
 # Memory optimization
 CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_INTERNAL=y
