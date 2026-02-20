@@ -247,10 +247,11 @@ static void ble_scoreboard_advertise(void)
     memset(&adv_params, 0, sizeof(adv_params));
     adv_params.conn_mode = BLE_GAP_CONN_MODE_UND;
     adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
-    // Slow advertising reduces radio duty cycle during standby.
-    // iOS/watchOS scans for 10-30s so discovery is unaffected.
-    adv_params.itvl_min = BLE_GAP_ADV_ITVL_MS(500);
-    adv_params.itvl_max = BLE_GAP_ADV_ITVL_MS(1000);
+    // 200-250ms: fast enough for ~1s discovery, still 2x slower than original 100ms.
+    // The big power saving is from the 200-400ms connection interval once connected,
+    // not from advertising interval.
+    adv_params.itvl_min = BLE_GAP_ADV_ITVL_MS(200);
+    adv_params.itvl_max = BLE_GAP_ADV_ITVL_MS(250);
 
     // Start advertising
     rc = ble_gap_adv_start(g_own_addr_type, NULL, BLE_HS_FOREVER,
@@ -590,9 +591,6 @@ static void ble_scoreboard_on_sync(void)
                  addr[5], addr[4], addr[3], addr[2], addr[1], addr[0]);
     }
 
-    // Clear existing bonds
-    ble_scoreboard_clear_bonds();
-
     // Generate hardware ID
     ble_scoreboard_generate_hardware_id(g_hardware_id);
 
@@ -639,13 +637,15 @@ void ble_scoreboard_init(void)
     ble_hs_cfg.sync_cb = ble_scoreboard_on_sync;
     ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
-    // Enable bonding
-    ble_hs_cfg.sm_bonding = 1;
+    // No security: open connection, no pairing, no bonding.
+    // The characteristic has no _ENC flag so writes are accepted without encryption.
+    // This eliminates the pairing handshake on every connection.
+    ble_hs_cfg.sm_bonding = 0;
     ble_hs_cfg.sm_mitm = 0;
-    ble_hs_cfg.sm_sc = 1;
+    ble_hs_cfg.sm_sc = 0;
     ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_NO_IO;
-    ble_hs_cfg.sm_our_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
-    ble_hs_cfg.sm_their_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
+    ble_hs_cfg.sm_our_key_dist = 0;
+    ble_hs_cfg.sm_their_key_dist = 0;
 
     // Initialize GATT services
     ble_svc_gap_init();
