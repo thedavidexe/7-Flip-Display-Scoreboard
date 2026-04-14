@@ -64,3 +64,20 @@ void GenerateAlarm(uint8_t group);
 void DemoMode(uint8_t mode);
 
 #endif /* MAIN_74AHC595_H_ */
+
+
+/* NEW PIN MAPPING FOR ESP32-C3-WROOM-02-H4 chip
+Schematic Net,ESP32-C3-WROOM-02-H4 Pin,Notes
+3V3,Pin 1 (3V3),Power supply 
+GND,"Pin 9, 19 (GND)",Connect to ground plane 
+RESET,Pin 2 (EN),Chip enable / Reset 
+FLASH,Pin 8 (IO9),Crucial for Boot Mode (Internal pull-up) +1
+TX,Pin 12 (TXD),UART TX 
+RX,Pin 11 (RXD),UART RX 
+SR_DATA_IN,Pin 18 (IO0),General I/O 
+SERIAL_OUT,Pin 17 (IO1),General I/O 
+POWER,Pin 15 (IO3),General I/O 
+SR_LATCH,Pin 3 (IO4),General I/O 
+FEEDBACK,Pin 4 (IO5),General I/O 
+SR_CLK,Pin 5 (IO6),General I/O 
+*/
