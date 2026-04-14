@@ -25,9 +25,7 @@
 #include "freertos/task.h"
 #include "nimble/nimble_port.h"
 #include "driver/gpio.h"
-#include "driver/rtc_io.h"
 #include "74AHC595.h"
-#include "led.h"
 
 static const char *TAG = "POWER_MGR";
 
@@ -181,13 +179,6 @@ void power_manager_enter_deep_sleep(void)
 
     // Enable the global digital-pad hold for deep sleep
     gpio_deep_sleep_hold_en();
-
-    // Isolate RTC-capable LED pads to prevent leakage through external
-    // pull-ups / LED circuits (even though PWM is not initialised,
-    // the pads can still leak a few hundred uA if left connected)
-    rtc_gpio_isolate(LED_GPIO_RED);
-    rtc_gpio_isolate(LED_GPIO_GREEN);
-    rtc_gpio_isolate(LED_GPIO_BLUE);
 
     // Small delay to allow logs to flush
     vTaskDelay(pdMS_TO_TICKS(100));

@@ -37,13 +37,14 @@
 
 #define DISP "DISP"
 
-// Pin configuration: update according to your project
-#define SHIFT_REG_DATA_PIN   	GPIO_NUM_33    // Data pin
-#define SHIFT_REG_LATCH_PIN  	GPIO_NUM_18    // Latch pin
-#define SHIFT_REG_CLOCK_PIN  	GPIO_NUM_16    // Clock pin
+// Pin configuration for ESP32-C3-WROOM-02-H4
+#define SHIFT_REG_DATA_PIN   	GPIO_NUM_7     // SR_DATA_IN (IO7)
+#define SHIFT_REG_LATCH_PIN  	GPIO_NUM_19    // SR_LATCH   (IO19)
+#define SHIFT_REG_CLOCK_PIN  	GPIO_NUM_10    // SR_CLK     (IO10)
 
-#define DETECT_PIN 				GPIO_NUM_23
-#define POWER_PIN				GPIO_NUM_19
+#define DETECT_PIN 				GPIO_NUM_1     // SERIAL_OUT (IO1)
+#define POWER_PIN				GPIO_NUM_3     // POWER      (IO3)
+#define FEEDBACK_PIN         GPIO_NUM_18    // FEEDBACK   (IO18)
 
 // Queue and task parameters
 #define SR_QUEUE_LENGTH    10
@@ -65,19 +66,3 @@ void DemoMode(uint8_t mode);
 
 #endif /* MAIN_74AHC595_H_ */
 
-
-/* NEW PIN MAPPING FOR ESP32-C3-WROOM-02-H4 chip
-Schematic Net,ESP32-C3-WROOM-02-H4 Pin,Notes
-3V3,Pin 1 (3V3),Power supply 
-GND,"Pin 9, 19 (GND)",Connect to ground plane 
-RESET,Pin 2 (EN),Chip enable / Reset 
-FLASH,Pin 8 (IO9),Crucial for Boot Mode (Internal pull-up) +1
-TX,Pin 12 (TXD),UART TX 
-RX,Pin 11 (RXD),UART RX 
-SR_DATA_IN,Pin 18 (IO0),General I/O 
-SERIAL_OUT,Pin 17 (IO1),General I/O 
-POWER,Pin 15 (IO3),General I/O 
-SR_LATCH,Pin 3 (IO4),General I/O 
-FEEDBACK,Pin 4 (IO5),General I/O 
-SR_CLK,Pin 5 (IO6),General I/O 
-*/

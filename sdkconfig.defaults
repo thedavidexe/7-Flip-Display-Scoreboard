@@ -7,9 +7,6 @@ CONFIG_BT_ENABLED=y
 # Use NimBLE (lighter weight than Bluedroid)
 CONFIG_BT_NIMBLE_ENABLED=y
 
-# BLE only mode (no classic Bluetooth)
-CONFIG_BTDM_CTRL_MODE_BLE_ONLY=y
-
 # Connection settings
 CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
 CONFIG_BT_NIMBLE_MAX_BONDS=0

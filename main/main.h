@@ -41,13 +41,10 @@
 #include "freertos/queue.h"
 #include "esp_rest_main.h"
 
-//#include "rtc.h"
 #include "sdkconfig.h"
 #include "status_led.h"
 #include "74AHC595.h"
-#include "rtc.h"
 #include "mqtt_com.h"
-#include "led.h"
 
 
 /* Macros for setting a key in a variable */
