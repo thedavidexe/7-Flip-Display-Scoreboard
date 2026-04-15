@@ -137,10 +137,11 @@ class BLEManager: NSObject {
     // MARK: - Reconnection Logic
 
     /// Begin a reconnect attempt for the given peripheral.
-    /// Runs an active scan/connect cycle for up to reconnectionTimeout seconds.
+    /// Uses belt-and-suspenders: passive connect() registered at all times,
+    /// plus active scan cycles to find the device faster when RF is marginal.
     private func enterReconnecting(peripheral: CBPeripheral) {
         // Clear the characteristic — can't use the old one after disconnect.
-        // connectedPeripheral stays set so we know the target.
+        // connectedPeripheral stays set so we have the reference for connect().
         scoreboardCharacteristic = nil
         connectionStatus = .reconnecting
         reconnectTargetID = peripheral.identifier
@@ -153,23 +154,26 @@ class BLEManager: NSObject {
             self?.cleanup()  // Navigates to scan page after timeout
         }
 
-        // Start scanning immediately
+        // Register passive connect intent immediately. CoreBluetooth will connect
+        // whenever it sees the device advertising, even between our active scan windows.
+        centralManager.connect(peripheral, options: nil)
+
+        // Also start active scanning to find the device faster.
         performReconnectScan()
     }
 
     /// Start a 4-second active scan window. If the target is found, connect.
-    /// If not, wait 3 seconds and try again (until the 60s timer fires).
+    /// If not, wait 1 second and try again (until the 60s timer fires).
     private func performReconnectScan() {
         guard connectionStatus == .reconnecting else { return }
         centralManager.stopScan()
         centralManager.scanForPeripherals(withServices: [Constants.serviceUUID], options: nil)
 
-        // If target not found within the scan window, pause and retry
+        // If target not found within the scan window, pause briefly and retry
         reconnectScanTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { [weak self] _ in
             guard let self, self.connectionStatus == .reconnecting else { return }
             self.centralManager.stopScan()
-            // Schedule next scan after a brief pause
-            self.reconnectScanTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+            self.reconnectScanTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self] _ in
                 self?.performReconnectScan()
             }
         }
@@ -256,11 +260,11 @@ extension BLEManager: CBCentralManagerDelegate {
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         if connectionStatus == .reconnecting {
-            // Don't give up — schedule the next scan attempt after a brief pause
+            // Don't give up — immediately re-register the passive connect intent and
+            // restart the active scan to catch the next advertising window.
+            centralManager.connect(peripheral, options: nil)
             reconnectScanTimer?.invalidate()
-            reconnectScanTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
-                self?.performReconnectScan()
-            }
+            performReconnectScan()
         } else {
             lastError = error?.localizedDescription ?? "Failed to connect"
             cleanup()

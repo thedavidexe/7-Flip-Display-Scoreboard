@@ -284,14 +284,14 @@ static int ble_scoreboard_gap_event(struct ble_gap_event *event, void *arg)
             // Request low-duty-cycle connection parameters to reduce radio-on time and chip
             // heat. 200-400ms interval cuts ESP32 radio duty cycle ~10-20x vs iOS defaults
             // (~7.5-15ms). Latency=0 so the ESP32 wakes every event and misses no writes.
-            // Supervision timeout 5s = 50 missed events at 100ms before declaring disconnect,
-            // tolerating brief RF interference and momentary out-of-range without spurious drops.
+            // Supervision timeout 1s = 10 missed events at 100ms before declaring disconnect.
+            // Kept short so both sides detect loss quickly and begin reconnection sooner.
             // Apple guidelines allow 20ms-2000ms intervals so watchOS will accept these.
             struct ble_gap_upd_params conn_params = {
                 .itvl_min            = BLE_GAP_CONN_ITVL_MS(50),
                 .itvl_max            = BLE_GAP_CONN_ITVL_MS(100),
                 .latency             = 0,
-                .supervision_timeout = BLE_GAP_SUPERVISION_TIMEOUT_MS(5000),
+                .supervision_timeout = BLE_GAP_SUPERVISION_TIMEOUT_MS(1000),
                 .min_ce_len          = 0,
                 .max_ce_len          = 0,
             };
@@ -626,11 +626,12 @@ void ble_scoreboard_init(void)
         return;
     }
 
-    // Reduce TX power to 0 dBm. The auto/default is up to +20 dBm which is excessive
-    // for a short-range application (<30 m) and contributes to chip heating.
+    // Set TX power to +3 dBm. 0 dBm limits range too aggressively for a sports-hall
+    // application; +3 dBm improves reconnection reliability at the edge of range without
+    // a significant heat penalty. Increase to P6/P9 if more range is needed.
     // esp_ble_tx_power_set acts at controller level and works with NimBLE.
-    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV,     ESP_PWR_LVL_N0);
-    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_N0);
+    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV,     ESP_PWR_LVL_P3);
+    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_P3);
 
     // Configure the host
     ble_hs_cfg.reset_cb = ble_scoreboard_on_reset;
