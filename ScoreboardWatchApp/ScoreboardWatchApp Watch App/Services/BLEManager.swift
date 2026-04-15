@@ -24,6 +24,14 @@ class BLEManager: NSObject {
     private var connectedPeripheral: CBPeripheral?
     private var scoreboardCharacteristic: CBCharacteristic?
     private var scanTimer: Timer?
+    private var intentionalDisconnect = false
+
+    // Active scan run during reconnect alongside the background connect() request.
+    // Background connect() uses a ~0.5–1% scan duty cycle (11 ms window / 1250–2560 ms
+    // interval), which can take 10+ seconds at distance. An active foreground scan uses
+    // a much wider duty cycle, cutting reconnect time to 1–2 seconds.
+    private var isReconnectScanning = false
+    private var reconnectScanTimer: Timer?
 
     // MARK: - Initialization
 
@@ -58,7 +66,11 @@ class BLEManager: NSObject {
 
     /// Stop scanning for devices
     func stopScanning() {
-        centralManager.stopScan()
+        // Don't kill an in-progress reconnect scan when the user-initiated
+        // scan timer fires — they are independent operations.
+        if !isReconnectScanning {
+            centralManager.stopScan()
+        }
         scanTimer?.invalidate()
         scanTimer = nil
         if connectionStatus == .scanning {
@@ -78,6 +90,7 @@ class BLEManager: NSObject {
 
     /// Disconnect from the current device
     func disconnect() {
+        intentionalDisconnect = true
         if let peripheral = connectedPeripheral {
             centralManager.cancelPeripheralConnection(peripheral)
         }
@@ -113,10 +126,39 @@ class BLEManager: NSObject {
     // MARK: - Private Helpers
 
     private func cleanup() {
+        stopReconnectScan()
         connectedPeripheral = nil
         scoreboardCharacteristic = nil
         connectedDevice = nil
         connectionStatus = .disconnected
+    }
+
+    /// Start an active foreground scan alongside the pending background connect().
+    /// Active scanning uses aggressive parameters so the Watch catches advertising
+    /// packets much more frequently than the background connect() scan alone.
+    private func startReconnectScan() {
+        guard centralManager.state == .poweredOn, !isReconnectScanning else { return }
+        isReconnectScanning = true
+        centralManager.scanForPeripherals(
+            withServices: [Constants.serviceUUID],
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+        )
+        // Scan aggressively for 30 s, then stop — the background connect() keeps
+        // retrying indefinitely after that for resilience when the screen is off.
+        reconnectScanTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: false) { [weak self] _ in
+            self?.stopReconnectScan()
+        }
+    }
+
+    private func stopReconnectScan() {
+        guard isReconnectScanning else { return }
+        isReconnectScanning = false
+        reconnectScanTimer?.invalidate()
+        reconnectScanTimer = nil
+        // Only stop the hardware scan if not also running a user-initiated scan.
+        if connectionStatus != .scanning {
+            centralManager.stopScan()
+        }
     }
 
     private func extractHardwareId(from name: String?) -> String {
@@ -155,6 +197,11 @@ extension BLEManager: CBCentralManagerDelegate {
                         didDiscover peripheral: CBPeripheral,
                         advertisementData: [String: Any],
                         rssi RSSI: NSNumber) {
+        // During a reconnect scan we don't touch discoveredDevices — the pending
+        // connect() request is already queued and will fire as soon as the system
+        // sees this advertisement. No need to call connect() again.
+        guard !isReconnectScanning else { return }
+
         let hardwareId = extractHardwareId(from: peripheral.name)
 
         let device = ScoreboardDevice(
@@ -173,6 +220,7 @@ extension BLEManager: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        stopReconnectScan()
         peripheral.discoverServices([Constants.serviceUUID])
     }
 
@@ -182,12 +230,18 @@ extension BLEManager: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        if error != nil {
-            // Unexpected disconnect - try to reconnect
-            connectionStatus = .reconnecting
-            centralManager.connect(peripheral, options: nil)
-        } else {
+        if intentionalDisconnect {
+            intentionalDisconnect = false
             cleanup()
+        } else {
+            // Unexpected drop — keep the peripheral and device references so the
+            // UI can stay on the score screen. Issue both a background connect()
+            // (persistent, works when screen is off) and an active foreground scan
+            // (aggressive duty cycle, connects in 1–2 s while app is visible).
+            scoreboardCharacteristic = nil
+            connectionStatus = .connecting
+            centralManager.connect(peripheral, options: nil)
+            startReconnectScan()
         }
     }
 }

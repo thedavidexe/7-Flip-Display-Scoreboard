@@ -6,7 +6,6 @@ enum ConnectionStatus: String {
     case scanning = "Scanning..."
     case connecting = "Connecting..."
     case connected = "Connected"
-    case reconnecting = "Reconnecting..."
 }
 
 /// Core state model for the scoreboard (watch version - no timer)

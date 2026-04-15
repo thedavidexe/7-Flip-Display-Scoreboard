@@ -11,7 +11,6 @@ enum Constants {
     // MARK: - BLE Timeouts
     static let scanTimeout: TimeInterval = 4.0
     static let connectionTimeout: TimeInterval = 10.0
-    static let reconnectionTimeout: TimeInterval = 60.0
     static let writeRetryCount = 3
     static let writeRetryDelayBase: TimeInterval = 0.1
 

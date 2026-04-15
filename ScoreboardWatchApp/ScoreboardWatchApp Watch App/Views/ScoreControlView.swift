@@ -37,6 +37,17 @@ struct ScoreControlView: View {
             }
             .padding(.horizontal, 2)
         }
+        .overlay(alignment: .bottom) {
+            if viewModel.connectionStatus == .connecting {
+                Text("Reconnecting...")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.orange)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.black.opacity(0.6), in: Capsule())
+                    .padding(.bottom, 4)
+            }
+        }
         .focusable()
         .focused($isFocused)
         .digitalCrownRotation(
@@ -92,20 +103,6 @@ struct ScoreControlView: View {
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
-        }
-        .overlay(alignment: .top) {
-            if viewModel.connectionStatus == .reconnecting {
-                HStack(spacing: 4) {
-                    ProgressView().scaleEffect(0.7)
-                    Text("Reconnecting...")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-                .padding(.top, 4)
-            }
         }
     }
 

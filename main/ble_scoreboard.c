@@ -28,6 +28,25 @@
 static const char *TAG = "BLE_SCOREBOARD";
 
 // ============================================================================
+// Advertising Parameters
+// ============================================================================
+// After a disconnect, advertise at a fast rate so the central can reconnect
+// quickly even at distance. The scan window on the Watch side is narrow, so a
+// short advertising interval gives many more chances for overlap per second.
+// After ADV_FAST_DURATION_MS the stack fires ADV_COMPLETE and we fall back to
+// slow advertising to reduce RF noise when nobody is trying to connect.
+#define ADV_FAST_ITVL_MIN_MS   30      // 30 ms  (~33 packets/sec)
+#define ADV_FAST_ITVL_MAX_MS   60      // 60 ms
+#define ADV_FAST_DURATION_MS   30000   // 30 seconds of fast advertising
+
+// Slow advertising: NimBLE default ~1280 ms (itvl = 0 means "use default")
+#define ADV_SLOW_ITVL_MIN      0
+#define ADV_SLOW_ITVL_MAX      0
+
+typedef enum { ADV_MODE_FAST, ADV_MODE_SLOW } adv_mode_t;
+static adv_mode_t g_adv_mode = ADV_MODE_FAST;
+
+// ============================================================================
 // Global State
 // ============================================================================
 static ble_scoreboard_state_t g_state = {0};
@@ -247,10 +266,27 @@ static void ble_scoreboard_advertise(void)
     memset(&adv_params, 0, sizeof(adv_params));
     adv_params.conn_mode = BLE_GAP_CONN_MODE_UND;
     adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
-    // itvl_min/itvl_max left at 0 → NimBLE uses its built-in defaults.
+
+    int32_t duration_ms;
+    if (g_adv_mode == ADV_MODE_FAST) {
+        // Short interval → many more opportunities for the Watch's scan window
+        // to overlap an advertisement, enabling reconnection at distance.
+        adv_params.itvl_min = BLE_GAP_ADV_ITVL_MS(ADV_FAST_ITVL_MIN_MS);
+        adv_params.itvl_max = BLE_GAP_ADV_ITVL_MS(ADV_FAST_ITVL_MAX_MS);
+        duration_ms = ADV_FAST_DURATION_MS;
+        ESP_LOGI(TAG, "BLE fast advertising started (%d-%d ms interval, %d s)",
+                 ADV_FAST_ITVL_MIN_MS, ADV_FAST_ITVL_MAX_MS,
+                 ADV_FAST_DURATION_MS / 1000);
+    } else {
+        // Slow advertising to reduce RF activity when no reconnect is pending.
+        adv_params.itvl_min = ADV_SLOW_ITVL_MIN;
+        adv_params.itvl_max = ADV_SLOW_ITVL_MAX;
+        duration_ms = BLE_HS_FOREVER;
+        ESP_LOGI(TAG, "BLE slow advertising started (default interval)");
+    }
 
     // Start advertising
-    rc = ble_gap_adv_start(g_own_addr_type, NULL, BLE_HS_FOREVER,
+    rc = ble_gap_adv_start(g_own_addr_type, NULL, duration_ms,
                            &adv_params, ble_scoreboard_gap_event, NULL);
     if (rc != 0) {
         ESP_LOGE(TAG, "Error starting advertisement: rc=%d", rc);
@@ -297,12 +333,19 @@ static int ble_scoreboard_gap_event(struct ble_gap_event *event, void *arg)
         ble_debug_set_subscribed(false);
 #endif
 
-        // Resume advertising for reconnection
+        // Always restart with fast advertising so the central can reconnect
+        // quickly — short intervals mean far more scan-window overlaps per second.
+        g_adv_mode = ADV_MODE_FAST;
         ble_scoreboard_advertise();
         break;
 
     case BLE_GAP_EVENT_ADV_COMPLETE:
-        ESP_LOGI(TAG, "Advertisement complete");
+        // Fast advertising duration expired → switch to slow to save RF activity.
+        // A new disconnect will reset back to fast.
+        if (g_adv_mode == ADV_MODE_FAST) {
+            ESP_LOGI(TAG, "Fast advertising window elapsed, switching to slow");
+            g_adv_mode = ADV_MODE_SLOW;
+        }
         ble_scoreboard_advertise();
         break;
 

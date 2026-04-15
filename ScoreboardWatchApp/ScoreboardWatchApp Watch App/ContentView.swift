@@ -22,7 +22,7 @@ struct ContentView: View {
         .onChange(of: viewModel.bleManager.connectionStatus) { oldValue, newValue in
             if newValue == .connected && oldValue != .connected {
                 viewModel.onConnected()
-            } else if newValue == .disconnected && (oldValue == .connected || oldValue == .reconnecting) {
+            } else if newValue == .disconnected && oldValue == .connected {
                 viewModel.onDisconnected()
             }
         }

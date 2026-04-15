@@ -21,10 +21,12 @@ class ScoreboardViewModel {
         bleManager.connectionStatus == .connected
     }
 
-    /// Whether to show the score control view (connected or actively reconnecting)
+    /// Whether to show the score control view.
+    /// Stays true while reconnecting so the user isn't sent back to the scan screen.
     var shouldShowControl: Bool {
-        let s = bleManager.connectionStatus
-        return s == .connected || s == .reconnecting
+        let status = bleManager.connectionStatus
+        return status == .connected ||
+               (status == .connecting && bleManager.connectedDevice != nil)
     }
 
     /// Current connection status
