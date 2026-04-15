@@ -247,11 +247,7 @@ static void ble_scoreboard_advertise(void)
     memset(&adv_params, 0, sizeof(adv_params));
     adv_params.conn_mode = BLE_GAP_CONN_MODE_UND;
     adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
-    // 100-150ms: fast enough for sub-500ms discovery, improves reconnection reliability
-    // at marginal range. The power saving over 200ms is negligible compared to the
-    // savings from the longer connection interval (50-100ms) once connected.
-    adv_params.itvl_min = BLE_GAP_ADV_ITVL_MS(100);
-    adv_params.itvl_max = BLE_GAP_ADV_ITVL_MS(150);
+    // itvl_min/itvl_max left at 0 → NimBLE uses its built-in defaults.
 
     // Start advertising
     rc = ble_gap_adv_start(g_own_addr_type, NULL, BLE_HS_FOREVER,
@@ -280,27 +276,6 @@ static int ble_scoreboard_gap_event(struct ble_gap_event *event, void *arg)
 
             // Record activity for power management
             power_manager_record_activity();
-
-            // Request low-duty-cycle connection parameters to reduce radio-on time and chip
-            // heat. 200-400ms interval cuts ESP32 radio duty cycle ~10-20x vs iOS defaults
-            // (~7.5-15ms). Latency=0 so the ESP32 wakes every event and misses no writes.
-            // Supervision timeout 1s = 10 missed events at 100ms before declaring disconnect.
-            // Kept short so both sides detect loss quickly and begin reconnection sooner.
-            // Apple guidelines allow 20ms-2000ms intervals so watchOS will accept these.
-            struct ble_gap_upd_params conn_params = {
-                .itvl_min            = BLE_GAP_CONN_ITVL_MS(50),
-                .itvl_max            = BLE_GAP_CONN_ITVL_MS(100),
-                .latency             = 0,
-                .supervision_timeout = BLE_GAP_SUPERVISION_TIMEOUT_MS(1000),
-                .min_ce_len          = 0,
-                .max_ce_len          = 0,
-            };
-            int upd_rc = ble_gap_update_params(g_conn_handle, &conn_params);
-            if (upd_rc != 0) {
-                ESP_LOGW(TAG, "Connection param update request failed: %d", upd_rc);
-            } else {
-                ESP_LOGI(TAG, "Connection param update requested: 50-100 interval");
-            }
 
             // First connection - send initial state
             if (!g_first_connection) {
@@ -625,13 +600,6 @@ void ble_scoreboard_init(void)
         ESP_LOGE(TAG, "Failed to initialize NimBLE port: %d", rc);
         return;
     }
-
-    // Set TX power to +3 dBm. 0 dBm limits range too aggressively for a sports-hall
-    // application; +3 dBm improves reconnection reliability at the edge of range without
-    // a significant heat penalty. Increase to P6/P9 if more range is needed.
-    // esp_ble_tx_power_set acts at controller level and works with NimBLE.
-    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV,     ESP_PWR_LVL_P3);
-    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_P3);
 
     // Configure the host
     ble_hs_cfg.reset_cb = ble_scoreboard_on_reset;
