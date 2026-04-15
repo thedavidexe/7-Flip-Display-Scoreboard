@@ -19,7 +19,7 @@
 // ============================================================================
 // Set to 0 to disable BLE debug logging and reduce firmware size (~4KB)
 #ifndef DEBUG_BLE_LOGGING
-#define DEBUG_BLE_LOGGING 1
+#define DEBUG_BLE_LOGGING 0
 #endif
 
 // ============================================================================

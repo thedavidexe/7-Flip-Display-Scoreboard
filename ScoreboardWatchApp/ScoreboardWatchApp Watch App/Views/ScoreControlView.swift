@@ -93,6 +93,20 @@ struct ScoreControlView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView()
         }
+        .overlay(alignment: .top) {
+            if viewModel.connectionStatus == .reconnecting {
+                HStack(spacing: 4) {
+                    ProgressView().scaleEffect(0.7)
+                    Text("Reconnecting...")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                .padding(.top, 4)
+            }
+        }
     }
 
     // MARK: - Score Panel
@@ -147,13 +161,18 @@ struct ScoreControlView: View {
             accumulatedRotation = 0
             lastScoreTime = Date()
             idleResetTask?.cancel()
-            WKInterfaceDevice.current().play(.success)
+            // Only give success haptic when actually connected; suppress during reconnect
+            if viewModel.isConnected {
+                WKInterfaceDevice.current().play(.success)
+            }
         } else if accumulatedRotation <= -threshold {
             viewModel.incrementBlueScore()
             accumulatedRotation = 0
             lastScoreTime = Date()
             idleResetTask?.cancel()
-            WKInterfaceDevice.current().play(.success)
+            if viewModel.isConnected {
+                WKInterfaceDevice.current().play(.success)
+            }
         } else {
             scheduleIdleReset()
         }

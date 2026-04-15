@@ -12,17 +12,17 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if viewModel.isConnected {
+            if viewModel.shouldShowControl {
                 ScoreControlView()
             } else {
                 ScoreboardSelectionView()
             }
         }
-        .animation(.easeInOut, value: viewModel.isConnected)
+        .animation(.easeInOut, value: viewModel.shouldShowControl)
         .onChange(of: viewModel.bleManager.connectionStatus) { oldValue, newValue in
             if newValue == .connected && oldValue != .connected {
                 viewModel.onConnected()
-            } else if newValue == .disconnected && oldValue == .connected {
+            } else if newValue == .disconnected && (oldValue == .connected || oldValue == .reconnecting) {
                 viewModel.onDisconnected()
             }
         }

@@ -16,9 +16,15 @@ class ScoreboardViewModel {
 
     // MARK: - Computed Properties
 
-    /// Whether currently connected to a scoreboard
+    /// Whether currently connected to a scoreboard (can send commands)
     var isConnected: Bool {
         bleManager.connectionStatus == .connected
+    }
+
+    /// Whether to show the score control view (connected or actively reconnecting)
+    var shouldShowControl: Bool {
+        let s = bleManager.connectionStatus
+        return s == .connected || s == .reconnecting
     }
 
     /// Current connection status
@@ -89,14 +95,17 @@ class ScoreboardViewModel {
         }
     }
 
-    /// Called when connection is established
+    /// Called when connection is established (fresh or reconnect)
     func onConnected() {
         if let device = bleManager.connectedDevice {
             state.connectedDeviceId = device.hardwareId
             settings.lastConnectedId = device.hardwareId
         }
         state.connectionStatus = .connected
-        sendInitialPacket()
+        // Sync the watch's current state to the scoreboard display.
+        // On a fresh connection the state is 0-0; on reconnect it reflects
+        // whatever the user had, ensuring the display matches the watch.
+        sendCurrentState(forceUpdate: true)
     }
 
     /// Called when disconnected

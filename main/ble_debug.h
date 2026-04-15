@@ -20,7 +20,7 @@ struct ble_gatt_access_ctxt;
 // ============================================================================
 // Set to 0 to disable debug logging and reduce firmware size
 #ifndef DEBUG_BLE_LOGGING
-#define DEBUG_BLE_LOGGING 1
+#define DEBUG_BLE_LOGGING 0
 #endif
 
 #if DEBUG_BLE_LOGGING
