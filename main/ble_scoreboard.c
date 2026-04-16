@@ -35,8 +35,8 @@ static const char *TAG = "BLE_SCOREBOARD";
 // short advertising interval gives many more chances for overlap per second.
 // After ADV_FAST_DURATION_MS the stack fires ADV_COMPLETE and we fall back to
 // slow advertising to reduce RF noise when nobody is trying to connect.
-#define ADV_FAST_ITVL_MIN_MS   30      // 30 ms  (~33 packets/sec)
-#define ADV_FAST_ITVL_MAX_MS   60      // 60 ms
+#define ADV_FAST_ITVL_MIN_MS   20      // 20 ms  (BLE spec minimum, ~50 packets/sec)
+#define ADV_FAST_ITVL_MAX_MS   30      // 30 ms
 #define ADV_FAST_DURATION_MS   30000   // 30 seconds of fast advertising
 
 // Slow advertising: NimBLE default ~1280 ms (itvl = 0 means "use default")
@@ -226,21 +226,16 @@ static void ble_scoreboard_advertise(void)
     struct ble_hs_adv_fields fields;
     int rc;
 
+    // Main advertising packet: flags + service UUID.
+    // Putting the UUID here (not in scan response) means centrals can match this
+    // device with a single received packet — no scan-request/scan-response round
+    // trip needed. At weak signal that cuts discovery from 3 packet exchanges to 1.
+    // Flags (3 B) + 128-bit UUID (18 B) = 21 B, well within the 31 B limit.
     memset(&fields, 0, sizeof(fields));
-
-    // Advertise flags
     fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
-
-    // Include TX power level
-    fields.tx_pwr_lvl_is_present = 1;
-    fields.tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO;
-
-    // Include complete local name
-    char device_name[32];
-    snprintf(device_name, sizeof(device_name), "Scoreboard %s", g_hardware_id);
-    fields.name = (uint8_t *)device_name;
-    fields.name_len = strlen(device_name);
-    fields.name_is_complete = 1;
+    fields.uuids128 = (ble_uuid128_t[]){ g_service_uuid };
+    fields.num_uuids128 = 1;
+    fields.uuids128_is_complete = 1;
 
     rc = ble_gap_adv_set_fields(&fields);
     if (rc != 0) {
@@ -248,13 +243,15 @@ static void ble_scoreboard_advertise(void)
         return;
     }
 
-    // Set scan response data with service UUID
+    // Scan response: device name (only sent when a central actively requests it).
     struct ble_hs_adv_fields rsp_fields;
     memset(&rsp_fields, 0, sizeof(rsp_fields));
 
-    rsp_fields.uuids128 = (ble_uuid128_t[]){ g_service_uuid };
-    rsp_fields.num_uuids128 = 1;
-    rsp_fields.uuids128_is_complete = 1;
+    char device_name[32];
+    snprintf(device_name, sizeof(device_name), "Scoreboard %s", g_hardware_id);
+    rsp_fields.name = (uint8_t *)device_name;
+    rsp_fields.name_len = strlen(device_name);
+    rsp_fields.name_is_complete = 1;
 
     rc = ble_gap_adv_rsp_set_fields(&rsp_fields);
     if (rc != 0) {
