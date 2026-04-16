@@ -221,7 +221,18 @@ extension BLEManager: CBCentralManagerDelegate {
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         stopReconnectScan()
-        peripheral.discoverServices([Constants.serviceUUID])
+        // CoreBluetooth caches services and characteristics on the CBPeripheral
+        // object between connections. On reconnect we still hold the same peripheral
+        // reference, so the cache is intact — skip the 2 ATT round trips and go
+        // straight to enabling indications.
+        if let cached = peripheral.services?
+            .first(where: { $0.uuid == Constants.serviceUUID })?
+            .characteristics?
+            .first(where: { $0.uuid == Constants.characteristicUUID }) {
+            finishConnection(to: peripheral, characteristic: cached)
+        } else {
+            peripheral.discoverServices([Constants.serviceUUID])
+        }
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
@@ -274,23 +285,28 @@ extension BLEManager: CBPeripheralDelegate {
             return
         }
 
+        finishConnection(to: peripheral, characteristic: characteristic)
+    }
+
+    /// Final step shared by both the cached-GATT fast path and the full discovery path.
+    private func finishConnection(to peripheral: CBPeripheral, characteristic: CBCharacteristic) {
         scoreboardCharacteristic = characteristic
 
-        // Enable indications for ACK
         if characteristic.properties.contains(.indicate) {
             peripheral.setNotifyValue(true, for: characteristic)
         }
 
-        // Find the device in discovered list
-        if let device = discoveredDevices.first(where: { $0.peripheral.identifier == peripheral.identifier }) {
-            connectedDevice = device
-        } else {
-            connectedDevice = ScoreboardDevice(
-                id: peripheral.identifier,
-                peripheral: peripheral,
-                hardwareId: extractHardwareId(from: peripheral.name),
-                rssi: -50
-            )
+        if connectedDevice == nil {
+            if let device = discoveredDevices.first(where: { $0.peripheral.identifier == peripheral.identifier }) {
+                connectedDevice = device
+            } else {
+                connectedDevice = ScoreboardDevice(
+                    id: peripheral.identifier,
+                    peripheral: peripheral,
+                    hardwareId: extractHardwareId(from: peripheral.name),
+                    rssi: -50
+                )
+            }
         }
 
         connectionStatus = .connected
