@@ -1,5 +1,6 @@
 import SwiftUI
 import WatchKit
+import HealthKit
 
 /// Main score control view for Apple Watch
 /// Uses Digital Crown rotation to increment scores:
@@ -187,37 +188,53 @@ struct ScoreControlView: View {
     }
 }
 
-// MARK: - Extended Runtime Session
+// MARK: - Workout Session Manager
+//
+// HKWorkoutSession keeps the app in the active foreground state, which allows
+// the Digital Crown to deliver events even when the wrist is lowered and the
+// display is off. WKExtendedRuntimeSession alone does not guarantee this.
 
-private class ExtendedRuntimeManager: NSObject, WKExtendedRuntimeSessionDelegate {
-    private var session: WKExtendedRuntimeSession?
+private class ExtendedRuntimeManager: NSObject, HKWorkoutSessionDelegate, HKLiveWorkoutBuilderDelegate {
+    private let healthStore = HKHealthStore()
+    private var workoutSession: HKWorkoutSession?
 
     func start() {
-        guard session == nil || session?.state == .invalid else { return }
-        session = WKExtendedRuntimeSession()
-        session?.delegate = self
-        session?.start()
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+        // Request authorization (no-op if already granted)
+        healthStore.requestAuthorization(toShare: [HKQuantityType.workoutType()], read: []) { [weak self] granted, _ in
+            guard granted else { return }
+            DispatchQueue.main.async { self?.beginSession() }
+        }
+    }
+
+    private func beginSession() {
+        guard workoutSession == nil else { return }
+        let config = HKWorkoutConfiguration()
+        config.activityType = .other
+        config.locationType = .unknown
+        do {
+            let session = try HKWorkoutSession(healthStore: healthStore, configuration: config)
+            session.delegate = self
+            workoutSession = session
+            session.startActivity(with: Date())
+        } catch {}
     }
 
     func stop() {
-        session?.invalidate()
-        session = nil
+        workoutSession?.end()
+        workoutSession = nil
     }
 
-    func extendedRuntimeSessionDidStart(_ extendedRuntimeSession: WKExtendedRuntimeSession) {}
+    // MARK: HKWorkoutSessionDelegate
+    func workoutSession(_ workoutSession: HKWorkoutSession,
+                        didChangeTo toState: HKWorkoutSessionState,
+                        from fromState: HKWorkoutSessionState,
+                        date: Date) {}
 
-    func extendedRuntimeSessionWillExpire(_ extendedRuntimeSession: WKExtendedRuntimeSession) {
-        // Restart before expiry to maintain continuous runtime
-        extendedRuntimeSession.invalidate()
-        let next = WKExtendedRuntimeSession()
-        next.delegate = self
-        next.start()
-        session = next
-    }
+    func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {}
 
-    func extendedRuntimeSession(
-        _ extendedRuntimeSession: WKExtendedRuntimeSession,
-        didInvalidateWith reason: WKExtendedRuntimeSessionInvalidationReason,
-        error: Error?
-    ) {}
+    // MARK: HKLiveWorkoutBuilderDelegate (required by protocol, unused)
+    func workoutBuilderDidCollectEvent(_ workoutBuilder: HKLiveWorkoutBuilder) {}
+    func workoutBuilder(_ workoutBuilder: HKLiveWorkoutBuilder,
+                        didCollectDataOf collectedTypes: Set<HKSampleType>) {}
 }

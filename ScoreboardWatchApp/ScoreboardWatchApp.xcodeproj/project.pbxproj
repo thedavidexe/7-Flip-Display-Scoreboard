@@ -452,6 +452,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "ScoreboardWatchApp Watch App/ScoreboardWatchApp Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 44U39GWPQG;
@@ -460,6 +461,7 @@
 				INFOPLIST_FILE = "ScoreboardWatchApp-Watch-App-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = ScoreboardWatchApp;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Bluetooth is used to control the scoreboard";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Allows use of scroll wheel without looking at display";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKWatchOnly = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -487,6 +489,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "ScoreboardWatchApp Watch App/ScoreboardWatchApp Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 44U39GWPQG;
@@ -495,6 +498,7 @@
 				INFOPLIST_FILE = "ScoreboardWatchApp-Watch-App-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = ScoreboardWatchApp;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Bluetooth is used to control the scoreboard";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Allows use of scroll wheel without looking at display";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKWatchOnly = YES;
 				LD_RUNPATH_SEARCH_PATHS = (

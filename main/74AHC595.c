@@ -456,11 +456,14 @@ void DisplaySymbol(uint8_t pattern_raw, uint8_t target_disp)
     if (previous_pattern == pattern_raw || target_disp >= total_disp) {
         return;
     }
-    
+
     if (previous_pattern != 0) {
         // figure out which segments have changed, if previous_pattern was cleared then don't skip anything
         previous_seg_same_skip = ~(previous_pattern ^ pattern_raw);
     }
+
+    ESP_LOGI(DISP, "disp=%d pattern 0x%02X -> 0x%02X (skip_mask=0x%02X)",
+             target_disp, previous_pattern, pattern_raw, previous_seg_same_skip);
 
     // Clear state before starting: marks this display as unknown mid-flip.
     // If interrupted (e.g. power loss, disconnect), current_pattern stays 0 so
@@ -473,11 +476,14 @@ void DisplaySymbol(uint8_t pattern_raw, uint8_t target_disp)
     for (uint8_t seg_id = 0; seg_id < total_segs; seg_id++) {
 
         if ((previous_seg_same_skip >> bit_seg_pos_mapping[seg_id]) & 1) {
-            // if 1 then this seg is already set so skip changing it
+            ESP_LOGI(DISP, "disp=%d seg=%d (bit_pos=%d) skip (already set)",
+                     target_disp, seg_id, bit_seg_pos_mapping[seg_id]);
             continue;
         }
         // Single-display mode: update only the targeted display
         uint16_t full = get_symbol_pattern(pattern_raw, seg_id);
+        ESP_LOGI(DISP, "disp=%d seg=%d (bit_pos=%d) fire pattern=0x%04X",
+                 target_disp, seg_id, bit_seg_pos_mapping[seg_id], full);
         uint16_t chain[total_disp];
         for (uint8_t i = 0; i < total_disp; i++) {
             chain[i] = (i == target_disp) ? full : 0x0000;
@@ -497,7 +503,8 @@ void DisplaySymbol(uint8_t pattern_raw, uint8_t target_disp)
     // check (previous_pattern == pattern_raw) would prevent retrying stuck segments
     // on the next reconnect/resend.
     status.current_pattern[target_disp] = pattern_raw;
-    
+    ESP_LOGI(DISP, "disp=%d done, pattern=0x%02X", target_disp, pattern_raw);
+
 }
 
 
