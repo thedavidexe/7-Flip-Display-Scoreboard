@@ -461,14 +461,17 @@ void DisplaySymbol(uint8_t pattern_raw, uint8_t target_disp)
         // figure out which segments have changed, if previous_pattern was cleared then don't skip anything
         previous_seg_same_skip = ~(previous_pattern ^ pattern_raw);
     }
-    
-    // Update the stored pattern for this display
-    status.current_pattern[target_disp] = pattern_raw;
-    
+
+    // Clear state before starting: marks this display as unknown mid-flip.
+    // If interrupted (e.g. power loss, disconnect), current_pattern stays 0 so
+    // the next call treats the display state as unknown and re-flips all segments,
+    // which is necessary since we can't know which flaps completed.
+    status.current_pattern[target_disp] = 0;
+
     // change each flap 1 at a time to reduce instantaneous power draw
     gpio_set_level(POWER_PIN, 1);
     for (uint8_t seg_id = 0; seg_id < total_segs; seg_id++) {
-        
+
         if ((previous_seg_same_skip >> bit_seg_pos_mapping[seg_id]) & 1) {
             // if 1 then this seg is already set so skip changing it
             continue;
@@ -488,6 +491,12 @@ void DisplaySymbol(uint8_t pattern_raw, uint8_t target_disp)
         vTaskDelay(1 / portTICK_PERIOD_MS);
     }
     gpio_set_level(POWER_PIN, 0);
+
+    // Update stored pattern only after all segments have physically moved.
+    // If we update it early and a disconnect interrupts mid-flip, the early-exit
+    // check (previous_pattern == pattern_raw) would prevent retrying stuck segments
+    // on the next reconnect/resend.
+    status.current_pattern[target_disp] = pattern_raw;
     
 }
 

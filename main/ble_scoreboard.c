@@ -58,6 +58,10 @@ static bool g_first_connection = false;
 // Timer task handle for countdown
 static TaskHandle_t g_timer_task_handle = NULL;
 
+// Score display task handle — runs DisplayNumber off the NimBLE host task so
+// the BLE stack can process events while flaps are physically moving.
+static TaskHandle_t g_score_task_handle = NULL;
+
 // External status for display control
 extern status_t status;
 
@@ -476,6 +480,18 @@ static void ble_scoreboard_clear_red_display_state(void)
     }
 }
 
+// Score display task — keeps DisplayNumber off the NimBLE host task.
+// The GATT callback just updates g_state and notifies this task, so the
+// host task stays free to process BLE events while flaps are moving.
+static void ble_scoreboard_score_task(void *arg)
+{
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        DisplayNumber(g_state.blue_score, BLE_DISPLAY_GROUP_BLUE);
+        DisplayNumber(g_state.red_score, BLE_DISPLAY_GROUP_RED);
+    }
+}
+
 static void ble_scoreboard_enter_score_mode(void)
 {
     g_state.timer_active = false;
@@ -485,9 +501,11 @@ static void ble_scoreboard_enter_score_mode(void)
     ESP_LOGI(TAG, "Updating Score: Blue=%d, Red=%d",
              g_state.blue_score, g_state.red_score);
 
-    // Display scores: group 0 = blue (left), group 1 = red (right)
-    DisplayNumber(g_state.blue_score, BLE_DISPLAY_GROUP_BLUE);
-    DisplayNumber(g_state.red_score, BLE_DISPLAY_GROUP_RED);
+    if (g_score_task_handle == NULL) {
+        xTaskCreate(ble_scoreboard_score_task, "ble_score", 2048, NULL, 5, &g_score_task_handle);
+    } else {
+        xTaskNotifyGive(g_score_task_handle);
+    }
 }
 
 static void ble_scoreboard_enter_timer_mode(void)
