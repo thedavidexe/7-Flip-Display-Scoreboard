@@ -31,11 +31,52 @@
 #include "main.h"
 #include "74AHC595.h"
 #include "driver/gpio.h"
+#include "esp_timer.h"
+#include "freertos/semphr.h"
 
 // Initialization
 extern status_t status;
 static int last_data_bit = -1;
 static const uint8_t bit_seg_pos_mapping[7] = { 4, 3, 2, 5, 6, 0, 1 };
+
+// --- Pulse state machine -------------------------------------------------
+typedef enum { PULSE_PHASE_OFF = 0, PULSE_PHASE_ON } pulse_phase_t;
+
+typedef struct {
+    uint8_t            seg_count;
+    uint8_t            current_seg;
+    pulse_phase_t      phase;
+    uint8_t            total_disp;
+    uint16_t           on_chains[7][MAX_DISPLAYS];
+    uint16_t           off_chain[MAX_DISPLAYS];
+    SemaphoreHandle_t  done_sem;
+    esp_timer_handle_t timer;
+} pulse_sm_t;
+
+static pulse_sm_t g_pulse_sm;
+
+void shift_register_send_chain(uint16_t *data, uint8_t count);
+
+static void pulse_timer_cb(void *arg)
+{
+    pulse_sm_t *sm = (pulse_sm_t *)arg;
+
+    if (sm->phase == PULSE_PHASE_OFF) {
+        shift_register_send_chain(sm->off_chain, sm->total_disp);
+        sm->current_seg++;
+        if (sm->current_seg >= sm->seg_count) {
+            xSemaphoreGive(sm->done_sem);
+        } else {
+            sm->phase = PULSE_PHASE_ON;
+            esp_timer_start_once(sm->timer, 1000ULL);    // 1ms recharge gap
+        }
+    } else {
+        shift_register_send_chain(sm->on_chains[sm->current_seg], sm->total_disp);
+        sm->phase = PULSE_PHASE_OFF;
+        esp_timer_start_once(sm->timer, 70000ULL);      // 70ms pulse
+    }
+}
+// ------------------------------------------------------------------------
 
 /* Helper function to initialize GPIO */
 esp_err_t gpio_init(gpio_int_type_t type, gpio_mode_t mode, gpio_pulldown_t pull_down, gpio_pullup_t pull_up, int no, uint8_t initial_state)
@@ -92,8 +133,22 @@ esp_err_t shift_register_init(void)
 	if(err != ESP_OK){
 		return err;
 	}
-	
- 
+
+    g_pulse_sm.done_sem = xSemaphoreCreateBinary();
+    if (g_pulse_sm.done_sem == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    esp_timer_create_args_t ta = {
+        .callback = pulse_timer_cb,
+        .arg      = &g_pulse_sm,
+        .name     = "pulse_sm",
+    };
+    err = esp_timer_create(&ta, &g_pulse_sm.timer);
+    if (err != ESP_OK) {
+        return err;
+    }
+
     return ESP_OK;
 }
 
@@ -471,37 +526,43 @@ void DisplaySymbol(uint8_t pattern_raw, uint8_t target_disp)
     // which is necessary since we can't know which flaps completed.
     status.current_pattern[target_disp] = 0;
 
-    // change each flap 1 at a time to reduce instantaneous power draw
-    gpio_set_level(POWER_PIN, 1);
-    for (uint8_t seg_id = 0; seg_id < total_segs; seg_id++) {
+    // Pre-compute ON-chains for each segment that needs to flip
+    g_pulse_sm.seg_count  = 0;
+    g_pulse_sm.total_disp = total_disp;
 
+    for (uint8_t seg_id = 0; seg_id < total_segs; seg_id++) {
         if ((previous_seg_same_skip >> bit_seg_pos_mapping[seg_id]) & 1) {
             ESP_LOGI(DISP, "disp=%d seg=%d (bit_pos=%d) skip (already set)",
                      target_disp, seg_id, bit_seg_pos_mapping[seg_id]);
             continue;
         }
-        // Single-display mode: update only the targeted display
         uint16_t full = get_symbol_pattern(pattern_raw, seg_id);
         ESP_LOGI(DISP, "disp=%d seg=%d (bit_pos=%d) fire pattern=0x%04X",
                  target_disp, seg_id, bit_seg_pos_mapping[seg_id], full);
-        uint16_t chain[total_disp];
         for (uint8_t i = 0; i < total_disp; i++) {
-            chain[i] = (i == target_disp) ? full : 0x0000;
+            g_pulse_sm.on_chains[g_pulse_sm.seg_count][i] =
+                (i == target_disp) ? full : 0x0000;
         }
-        shift_register_send_chain(chain, total_disp);
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-        for (uint8_t i = 0; i < total_disp; i++) {
-            chain[i] = 0x0000;
-        }
-        shift_register_send_chain(chain, total_disp);
-        vTaskDelay(1 / portTICK_PERIOD_MS);
+        g_pulse_sm.seg_count++;
     }
+    for (uint8_t i = 0; i < total_disp; i++) g_pulse_sm.off_chain[i] = 0x0000;
+
+    if (g_pulse_sm.seg_count == 0) goto done;
+
+    gpio_set_level(POWER_PIN, 1);
+
+    // Fire first segment ON now, hand the rest to the timer state machine
+    shift_register_send_chain(g_pulse_sm.on_chains[0], total_disp);
+    g_pulse_sm.current_seg = 0;
+    g_pulse_sm.phase       = PULSE_PHASE_OFF;
+    esp_timer_start_once(g_pulse_sm.timer, 70000ULL);  // 70ms until first OFF
+
+    // Block until all segments done (state machine gives done_sem)
+    xSemaphoreTake(g_pulse_sm.done_sem, pdMS_TO_TICKS(800));  // 7 × 101ms ≈ 707ms + margin
+
     gpio_set_level(POWER_PIN, 0);
 
-    // Update stored pattern only after all segments have physically moved.
-    // If we update it early and a disconnect interrupts mid-flip, the early-exit
-    // check (previous_pattern == pattern_raw) would prevent retrying stuck segments
-    // on the next reconnect/resend.
+done:
     status.current_pattern[target_disp] = pattern_raw;
     ESP_LOGI(DISP, "disp=%d done, pattern=0x%02X", target_disp, pattern_raw);
 
